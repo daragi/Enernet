@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>안전점검 데이터 관리자</title>
+  <style>
+    :root {
+      --bg: #eef4ff;
+      --card: #ffffff;
+      --ink: #101828;
+      --muted: #667085;
+      --line: #d7deea;
+      --blue: #2563eb;
+      --blue-dark: #1d4ed8;
+      --danger: #dc2626;
+      --ok: #047857;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: radial-gradient(circle at 15% 15%, #d8f1e3 0, transparent 32%), var(--bg);
+      color: var(--ink);
+      font-family: "Pretendard", "Malgun Gothic", sans-serif;
+    }
+    main {
+      width: min(920px, calc(100% - 32px));
+      margin: 40px auto;
+      display: grid;
+      gap: 16px;
+    }
+    .card {
+      background: rgba(255, 255, 255, 0.92);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      padding: 24px;
+      box-shadow: 0 24px 70px rgba(28, 45, 87, 0.12);
+    }
+    h1 { margin: 0 0 8px; font-size: 30px; letter-spacing: -0.04em; }
+    h2 { margin: 0 0 12px; font-size: 18px; }
+    p { margin: 0 0 12px; color: var(--muted); line-height: 1.65; }
+    code {
+      padding: 2px 6px;
+      border-radius: 8px;
+      background: #eef2ff;
+      color: #1e3a8a;
+    }
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+    button, .link {
+      border: 0;
+      border-radius: 999px;
+      padding: 12px 18px;
+      font-weight: 800;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 44px;
+    }
+    button.primary { background: var(--blue); color: white; }
+    button.primary:hover { background: var(--blue-dark); }
+    button.secondary, .link { background: white; color: var(--ink); border: 1px solid var(--line); }
+    input[type="file"] {
+      display: block;
+      width: 100%;
+      padding: 14px;
+      border: 1px dashed #9aa8c2;
+      border-radius: 16px;
+      background: #f8fbff;
+    }
+    .status {
+      white-space: pre-wrap;
+      min-height: 120px;
+      padding: 16px;
+      border-radius: 16px;
+      background: #111827;
+      color: #d1d5db;
+      font-family: Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      overflow: auto;
+    }
+    .ok { color: var(--ok); }
+    .danger { color: var(--danger); }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="card">
+      <h1>안전점검 데이터 관리자</h1>
+      <p>월별 엑셀을 <code>API_map</code> 폴더에 넣은 뒤 갱신하거나, 아래에서 엑셀을 직접 업로드해 갱신합니다.</p>
+      <p>파일명은 <code>H074_2026.08_안전점검.xlsx</code>처럼 <code>H[센터코드]_YYYY.MM_안전점검.xlsx</code> 형식이어야 합니다.</p>
+      <div class="actions">
+        <button class="primary" id="rebuildBtn">API_map 기준 갱신 실행</button>
+        <a class="link" href="/">지도 화면 열기</a>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>엑셀 업로드 후 갱신</h2>
+      <p>여러 센터 파일을 한 번에 선택할 수 있습니다. 업로드된 파일은 <code>API_map</code> 폴더에 저장되고 데이터가 재생성됩니다.</p>
+      <input id="files" type="file" multiple accept=".xlsx">
+      <div class="actions">
+        <button class="primary" id="uploadBtn">업로드 및 갱신</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>처리 상태</h2>
+      <div class="status" id="status">대기 중</div>
+    </section>
+  </main>
+
+  <script>
+    const statusEl = document.getElementById("status");
+    const rebuildBtn = document.getElementById("rebuildBtn");
+    const uploadBtn = document.getElementById("uploadBtn");
+    const filesEl = document.getElementById("files");
+
+    function setStatus(message) {
+      statusEl.textContent = message;
+    }
+
+    function summarizeResult(payload) {
+      const result = payload.pipeline_result || {};
+      const lines = [
+        `상태: ${payload.status || "-"}`,
+        `처리 파일: ${(payload.processed_files || []).join(", ") || "API_map 폴더 기준"}`,
+        `주소 수: ${result.address_count ?? "-"}`,
+        `오더 수: ${result.order_count ?? "-"}`,
+        `출력: process_geocode.json`
+      ];
+      return lines.join("\n");
+    }
+
+    async function postJson(url) {
+      setStatus("처리 중입니다. 창을 닫지 마세요.");
+      const response = await fetch(url, { method: "POST" });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.detail || `HTTP ${response.status}`);
+      }
+      return payload;
+    }
+
+    rebuildBtn.addEventListener("click", async () => {
+      try {
+        const payload = await postJson("/api/rebuild");
+        setStatus(summarizeResult(payload));
+      } catch (error) {
+        setStatus(`실패: ${error.message}`);
+      }
+    });
+
+    uploadBtn.addEventListener("click", async () => {
+      const files = Array.from(filesEl.files || []);
+      if (!files.length) {
+        setStatus("업로드할 .xlsx 파일을 선택하세요.");
+        return;
+      }
+
+      const form = new FormData();
+      files.forEach((file) => form.append("files", file));
+      setStatus("업로드 및 갱신 중입니다. 창을 닫지 마세요.");
+
+      try {
+        const response = await fetch("/api/upload", { method: "POST", body: form });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(payload.detail || `HTTP ${response.status}`);
+        }
+        setStatus(summarizeResult(payload));
+      } catch (error) {
+        setStatus(`실패: ${error.message}`);
+      }
+    });
+  </script>
+</body>
+</html>
