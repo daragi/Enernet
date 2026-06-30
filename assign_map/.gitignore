@@ -1,0 +1,20 @@
+_internal/
+__pycache__/
+*.pyc
+
+# Local secrets
+api_keys.json
+
+# Runtime/build artifacts
+assign_map.exe
+assign_map.spec
+build/
+dist/
+*.log
+assign_map_server.log
+assign_map_server_error.log
+
+# Generated business data
+process_geocode.json
+geocodes/*.json
+uploaded_workbooks/*.xlsx
