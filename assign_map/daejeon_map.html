@@ -1,0 +1,2485 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="preconnect" href="https://oapi.map.naver.com" crossorigin>
+  <link rel="dns-prefetch" href="https://oapi.map.naver.com">
+  <title>단독주택 안전점검 순차 블럭 배정</title>
+  <style>
+    :root {
+      --panel: rgba(255, 255, 255, 0.6);
+      --panel-soft: rgba(255, 255, 255, 0.72);
+      --line: rgba(15, 23, 42, 0.18);
+      --text: #0f172a;
+      --muted: #475569;
+      --accent: #14b8a6;
+      --danger: #f87171;
+      --residual: #71717a;
+    }
+
+    * { box-sizing: border-box; }
+
+    html,
+    body,
+    #map {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text);
+    }
+
+    body { background: #020617; }
+
+    #map {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+    }
+
+    .topbar {
+      position: fixed;
+      top: 14px;
+      left: 14px;
+      right: 14px;
+      z-index: 5;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      pointer-events: none;
+    }
+
+    .topbar > * { pointer-events: auto; }
+
+    .search {
+      display: flex;
+      min-width: min(420px, calc(100vw - 28px));
+      max-width: 500px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 18px 50px rgba(2, 6, 23, 0.24);
+    }
+
+    .search input {
+      flex: 1;
+      min-width: 0;
+      border: 0;
+      background: transparent;
+      color: var(--text);
+      padding: 10px 12px;
+      outline: none;
+      font-size: 14px;
+    }
+
+    .search input::placeholder { color: #94a3b8; }
+
+    .panel {
+      position: fixed;
+      top: 72px;
+      left: 14px;
+      z-index: 4;
+      width: min(360px, calc(100vw - 28px));
+      max-height: calc(100vh - 96px);
+      overflow: auto;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: 0 22px 70px rgba(2, 6, 23, 0.34);
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+      padding: 10px 12px 8px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 16px;
+      line-height: 1.28;
+      letter-spacing: 0;
+    }
+
+    .helper {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.45;
+    }
+
+    .panel-body {
+      display: grid;
+      gap: 9px;
+      padding: 10px 12px 12px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .field {
+      display: grid;
+      gap: 5px;
+    }
+
+    label {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    select,
+    input[type="number"],
+    input[readonly] {
+      width: 100%;
+      height: 30px;
+      border-radius: 6px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.7);
+      color: var(--text);
+      padding: 0 9px;
+      font-size: 13px;
+      outline: none;
+    }
+
+    .buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .btn {
+      min-height: 30px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: rgba(255, 255, 255, 0.68);
+      color: var(--text);
+      padding: 0 11px;
+      font-size: 13px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .btn:hover { border-color: rgba(20, 184, 166, 0.72); }
+    .btn:disabled { opacity: 0.56; cursor: not-allowed; }
+    .btn.primary { background: rgba(20, 184, 166, 0.76); border-color: #0f766e; color: #042f2e; }
+    .btn.danger { background: rgba(248, 113, 113, 0.7); border-color: #b91c1c; color: #450a0a; }
+    .btn.icon { width: 30px; padding: 0; font-size: 17px; line-height: 1; }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .stat {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.56);
+      padding: 7px;
+      min-width: 0;
+    }
+
+    .stat .label {
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .stat .value {
+      margin-top: 3px;
+      font-weight: 700;
+      font-size: 15px;
+      overflow-wrap: anywhere;
+    }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #0f172a;
+    }
+
+    .band {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.4;
+      white-space: pre-line;
+    }
+
+    .zone-list,
+    .record-list {
+      display: grid;
+      gap: 6px;
+      max-height: 260px;
+      overflow: auto;
+      padding-right: 2px;
+    }
+
+    .zone-row,
+    .record-row {
+      display: grid;
+      gap: 3px;
+      width: 100%;
+      text-align: left;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.56);
+      color: var(--text);
+      padding: 6px;
+      cursor: pointer;
+    }
+
+    .zone-row.active,
+    .record-row.active {
+      border-color: #14b8a6;
+      background: rgba(20, 184, 166, 0.22);
+    }
+
+    .zone-line {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: center;
+      font-size: 13px;
+    }
+
+    .swatch {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      border: 1px solid #fff;
+      display: inline-block;
+      margin-right: 6px;
+      vertical-align: -1px;
+    }
+
+    .small {
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.42;
+      overflow-wrap: anywhere;
+    }
+
+    .detail {
+      position: fixed;
+      top: 72px;
+      right: 14px;
+      z-index: 4;
+      width: min(360px, calc(100vw - 28px));
+      max-height: calc(100vh - 96px);
+      overflow: auto;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: 0 22px 70px rgba(2, 6, 23, 0.34);
+    }
+
+    .detail.hidden,
+    .panel.hidden { display: none; }
+
+    .detail-body {
+      display: grid;
+      gap: 9px;
+      padding: 10px 12px 12px;
+    }
+
+    .toolbar {
+      position: fixed;
+      right: 14px;
+      bottom: 14px;
+      z-index: 5;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px;
+      box-shadow: 0 18px 50px rgba(2, 6, 23, 0.28);
+    }
+
+    .status {
+      position: fixed;
+      left: 14px;
+      bottom: 14px;
+      z-index: 6;
+      max-width: min(720px, calc(100vw - 28px));
+      padding: 9px 11px;
+      border-radius: 8px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      color: #0f172a;
+      font-size: 12px;
+      line-height: 1.45;
+      white-space: pre-line;
+      box-shadow: 0 18px 50px rgba(2, 6, 23, 0.24);
+    }
+
+    .loading {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      display: none;
+      place-items: center;
+      background: rgba(2, 6, 23, 0.38);
+    }
+
+    .loading.active { display: grid; }
+
+    .loading-card {
+      width: min(360px, calc(100vw - 36px));
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 18px;
+      box-shadow: 0 24px 80px rgba(2, 6, 23, 0.46);
+    }
+
+    .loading-title {
+      margin-bottom: 8px;
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    .loading-message {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+      white-space: pre-line;
+    }
+
+    .progress {
+      position: relative;
+      height: 4px;
+      margin-top: 14px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(148, 163, 184, 0.24);
+    }
+
+    .progress::before {
+      content: "";
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 42%;
+      border-radius: inherit;
+      background: #14b8a6;
+      animation: slide 1.1s ease-in-out infinite alternate;
+    }
+
+    @keyframes slide {
+      from { transform: translateX(0); }
+      to { transform: translateX(140%); }
+    }
+
+    @media (max-width: 980px) {
+      .detail {
+        top: auto;
+        right: 14px;
+        left: 14px;
+        bottom: 72px;
+        width: auto;
+        max-height: 42vh;
+      }
+
+      .panel {
+        top: 72px;
+        max-height: 48vh;
+      }
+    }
+
+    @media (max-width: 620px) {
+      .topbar {
+        flex-wrap: wrap;
+      }
+
+      .panel {
+        top: 116px;
+        max-height: 45vh;
+      }
+
+      .grid,
+      .stats {
+        grid-template-columns: 1fr;
+      }
+
+      .toolbar {
+        left: 14px;
+        right: 14px;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <div class="topbar">
+    <div class="search">
+      <input id="search-input" type="search" placeholder="주소, 동, 도로명, 지번 검색">
+      <button id="search-btn" type="button" class="btn">검색</button>
+    </div>
+    <button id="fit-all-btn" type="button" class="btn">전체 보기</button>
+  </div>
+
+  <aside id="control-panel" class="panel">
+    <div class="panel-header">
+      <div>
+        <h1>단독주택 안전점검 순차 블럭 배정</h1>
+        <div class="helper">shp/dbf polygon 매칭 결과를 기준으로 activeBlock을 순차 배정합니다.</div>
+      </div>
+      <button id="toggle-panel-btn" type="button" class="btn icon" title="패널 닫기">×</button>
+    </div>
+    <div class="panel-body">
+      <div class="grid">
+        <div class="field">
+          <label for="center-select">센터</label>
+          <select id="center-select"></select>
+        </div>
+        <div class="field">
+          <label for="month-select">월</label>
+          <select id="month-select"></select>
+        </div>
+        <div class="field">
+          <label for="people-input">인원</label>
+          <input id="people-input" type="number" min="1" step="1" value="20">
+        </div>
+        <div class="field">
+          <label for="target-output">인당 목표</label>
+          <input id="target-output" type="text" value="-" readonly>
+        </div>
+      </div>
+
+      <div class="buttons">
+        <button id="assign-btn" type="button" class="btn primary">배정 실행</button>
+        <button id="clear-btn" type="button" class="btn">배정 초기화</button>
+        <button id="remaining-btn" type="button" class="btn">잔여오더 0</button>
+        <button id="export-btn" type="button" class="btn">엑셀 저장</button>
+      </div>
+
+      <div class="buttons">
+        <button id="toggle-points-btn" type="button" class="btn">점 표시 ON</button>
+        <button id="toggle-cadastral-btn" type="button" class="btn">지적도 ON</button>
+        <button id="reset-map-btn" type="button" class="btn">지도 초기화</button>
+      </div>
+
+      <div class="stats">
+        <div class="stat">
+          <div class="label">주소</div>
+          <div id="stat-addresses" class="value">-</div>
+        </div>
+        <div class="stat">
+          <div class="label">오더</div>
+          <div id="stat-orders" class="value">-</div>
+        </div>
+        <div class="stat">
+          <div class="label">블럭</div>
+          <div id="stat-blocks" class="value">-</div>
+        </div>
+      </div>
+
+      <div class="section-title">
+        <span>배정 결과</span>
+      </div>
+      <div id="band-summary" class="band">허용 범위 -</div>
+      <div id="assignment-table" class="zone-list"></div>
+    </div>
+  </aside>
+
+  <aside id="detail-panel" class="detail">
+    <div class="panel-header">
+      <div>
+        <h1 id="detail-title">상세 정보</h1>
+        <div id="detail-subtitle" class="helper">주소 또는 배정 인원을 선택하세요.</div>
+      </div>
+      <button id="toggle-detail-btn" type="button" class="btn icon" title="상세 닫기">×</button>
+    </div>
+    <div id="detail-content" class="detail-body">
+      <div class="small">선택된 항목이 없습니다.</div>
+    </div>
+  </aside>
+
+  <div class="toolbar">
+    <button id="open-panel-btn" type="button" class="btn">패널</button>
+    <button id="open-detail-btn" type="button" class="btn">상세</button>
+    <button id="zoom-out-btn" type="button" class="btn icon" title="축소">−</button>
+    <button id="zoom-in-btn" type="button" class="btn icon" title="확대">+</button>
+  </div>
+
+  <div id="status" class="status">초기화 중입니다.</div>
+
+  <div id="loading" class="loading" aria-hidden="true">
+    <div class="loading-card">
+      <div class="loading-title">배정 실행 중</div>
+      <div id="loading-message" class="loading-message">processed_assignment_blocks.json을 확인하고 있습니다.</div>
+      <div class="progress"></div>
+    </div>
+  </div>
+
+  <script>
+    if (location.port === "8010" && !["127.0.0.1", "localhost"].includes(location.hostname)) {
+      location.replace(`http://127.0.0.1:${location.port}${location.pathname}${location.search}${location.hash}`);
+    }
+
+    const NAVER_MAPS_KEY_ID = "4opvw9ym7h";
+    const START_DIRECTION = "northwest_to_southeast";
+    const REGULAR_JUMP_LIMIT_METERS = 500;
+    const APP_DATA_JSON = "./processed_assignment_blocks.json";
+    const RESIDUAL_GRAY = "#71717a";
+    const ZONE_COLORS = [
+      "#0067b1", "#d33115", "#00a65a", "#7b2cbf", "#f59f00",
+      "#008c95", "#c1126b", "#5c940d", "#f76707", "#364fc7",
+      "#2f9e44", "#9c36b5", "#e03131", "#0b7285", "#fab005",
+      "#7048e8", "#087f5b", "#e64980", "#1971c2", "#c2410c",
+      "#66a80f", "#862e9c", "#f03e3e", "#0ca678", "#f08c00",
+      "#4263eb", "#a61e4d", "#228be6", "#74b816", "#d9480f",
+      "#5f3dc4", "#099268", "#e67700", "#1864ab", "#c2255c",
+      "#37b24d", "#ae3ec9", "#e8590c", "#1098ad", "#f06595"
+    ];
+
+    const state = {
+      appData: null,
+      map: null,
+      cadastralLayer: null,
+      cadastralVisible: true,
+      pointsVisible: true,
+      currentScope: null,
+      currentAssignments: [],
+      currentRecordMap: new Map(),
+      zoneByRecordId: new Map(),
+      assignmentZoneMap: new Map(),
+      residualRecords: [],
+      residualRecordIdSet: new Set(),
+      markers: [],
+      markerToken: 0,
+      markerRenderTimer: null,
+      selectedRecordId: null,
+      selectedZoneId: null,
+      selectedOverlays: [],
+      searchMarker: null,
+      cachedIcons: new Map(),
+      naverPromise: null,
+      assignmentRunning: false
+    };
+
+    function hardBandViolationPenalty(orders, minTarget, maxTarget) {
+      const under = Math.max(0, minTarget - orders);
+      const over = Math.max(0, orders - maxTarget);
+      const violation = under + over;
+      if (violation <= 0) return 0;
+      return 100000000 + violation * violation * 900000;
+    }
+
+    function targetDeviationPenalty(orders, target) {
+      return Math.abs(orders - target) * 120;
+    }
+
+    function overflowPenalty(projectedOrders, maxTarget) {
+      const over = Math.max(0, projectedOrders - maxTarget);
+      return over * 2600;
+    }
+
+    function jumpDistancePenalty(distanceMeters) {
+      if (!Number.isFinite(distanceMeters)) return 100000000;
+      if (distanceMeters <= 400) return 0;
+      if (distanceMeters <= 800) return (distanceMeters - 400) * 7;
+      if (distanceMeters <= 1000) return 9000 + (distanceMeters - 800) * 14;
+      return 28000 + (distanceMeters - 1000) * 60;
+    }
+
+    function formatNumber(value) {
+      return new Intl.NumberFormat("ko-KR").format(Math.round(Number(value) || 0));
+    }
+
+    function normalizeText(value) {
+      return String(value ?? "").replace(/\u3000/g, " ").replace(/\s+/g, " ").trim();
+    }
+
+    function escapeHtml(value) {
+      return normalizeText(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function formatListValue(value) {
+      if (Array.isArray(value)) return value.map(normalizeText).filter(Boolean).join(", ");
+      if (value && typeof value === "object") {
+        return Object.entries(value)
+          .map(([key, count]) => `${normalizeText(key)} ${formatNumber(count)}`)
+          .join(", ");
+      }
+      return normalizeText(value);
+    }
+
+    function formatHosu(record) {
+      return formatListValue(record?.hosu || record?.sample_hosu) || "-";
+    }
+
+    function asNumber(value, fallback = 0) {
+      const number = Number(value);
+      return Number.isFinite(number) ? number : fallback;
+    }
+
+    function orderOf(record) {
+      return Math.max(0, asNumber(record.orders, 0));
+    }
+
+    function setStatus(message, isError = false) {
+      const el = document.getElementById("status");
+      el.textContent = message;
+      el.style.color = isError ? "#991b1b" : "#0f172a";
+    }
+
+    function showLoading(message) {
+      state.assignmentRunning = true;
+      document.getElementById("loading-message").textContent = message;
+      document.getElementById("loading").classList.add("active");
+      document.getElementById("loading").setAttribute("aria-hidden", "false");
+      document.getElementById("assign-btn").disabled = true;
+    }
+
+    function setLoadingMessage(message) {
+      document.getElementById("loading-message").textContent = message;
+    }
+
+    function hideLoading() {
+      state.assignmentRunning = false;
+      document.getElementById("loading").classList.remove("active");
+      document.getElementById("loading").setAttribute("aria-hidden", "true");
+      document.getElementById("assign-btn").disabled = false;
+    }
+
+    function nextFrame() {
+      return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+    }
+
+    function haversineM(lat1, lon1, lat2, lon2) {
+      const toRad = (value) => value * Math.PI / 180;
+      const dLat = toRad(lat2 - lat1);
+      const dLon = toRad(lon2 - lon1);
+      const a = Math.sin(dLat / 2) ** 2 +
+        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+      return 2 * 6371000 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    function recordDistance(left, right) {
+      if (!left || !right) return Infinity;
+      return haversineM(asNumber(left.lat), asNumber(left.lon), asNumber(right.lat), asNumber(right.lon));
+    }
+
+    function blockDistance(left, right) {
+      if (!left || !right || !left.centroid || !right.centroid) return Infinity;
+      return haversineM(left.centroid.lat, left.centroid.lon, right.centroid.lat, right.centroid.lon);
+    }
+
+    function pointToBlockDistance(point, block) {
+      if (!point || !block?.centroid) return Infinity;
+      return haversineM(point.lat, point.lon, block.centroid.lat, block.centroid.lon);
+    }
+
+    function waitForNaverMaps() {
+      if (window.naver?.maps) return Promise.resolve(window.naver.maps);
+      if (state.naverPromise) return state.naverPromise;
+      state.naverPromise = new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = `https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=${encodeURIComponent(NAVER_MAPS_KEY_ID)}`;
+        script.async = true;
+        script.defer = true;
+        script.fetchPriority = "high";
+        script.dataset.naverMapsSdk = "1";
+        script.onload = () => window.naver?.maps ? resolve(window.naver.maps) : reject(new Error("Naver Maps SDK 로드 실패"));
+        script.onerror = () => reject(new Error("Naver Maps SDK 요청 실패"));
+        document.head.appendChild(script);
+      });
+      return state.naverPromise;
+    }
+
+    async function fetchJson(path) {
+      const response = await fetch(`${path}?v=${Date.now()}`, { cache: "no-store" });
+      if (!response.ok) throw new Error(`${path} 로드 실패 (${response.status})`);
+      return response.json();
+    }
+
+    async function loadAppData() {
+      try {
+        return await fetchJson(APP_DATA_JSON);
+      } catch (error) {
+        console.warn(error);
+        setStatus("processed_assignment_blocks.json을 찾지 못했습니다. preprocess_transport_blocks.py를 먼저 실행하세요.", true);
+        throw error;
+      }
+    }
+
+    function getScopeKey() {
+      const month = document.getElementById("month-select").value;
+      const center = document.getElementById("center-select").value;
+      return `${month}|${center}`;
+    }
+
+    function getScope() {
+      return state.appData?.scopes?.[getScopeKey()] || null;
+    }
+
+    function populateFilters() {
+      const centers = state.appData.centers || [];
+      const months = state.appData.months || [];
+      document.getElementById("center-select").innerHTML = centers.map((center) => `<option value="${center}">${center}</option>`).join("");
+      document.getElementById("month-select").innerHTML = months.map((month) => `<option value="${month}">${month}</option>`).join("");
+      if (centers.includes("H071")) document.getElementById("center-select").value = "H071";
+      if (months.includes("2026.07")) document.getElementById("month-select").value = "2026.07";
+    }
+
+    function updateTargetOutput() {
+      const scope = getScope();
+      const peopleCount = getPeopleCount();
+      if (!scope || peopleCount <= 0) {
+        document.getElementById("target-output").value = "-";
+        return;
+      }
+      const target = getTotalOrders(scope.records || []) / peopleCount;
+      document.getElementById("target-output").value = `${formatNumber(target)}건`;
+    }
+
+    function updateStats(scope) {
+      document.getElementById("stat-addresses").textContent = formatNumber(scope?.total_addresses || scope?.records?.length || 0);
+      document.getElementById("stat-orders").textContent = formatNumber(scope?.total_orders || getTotalOrders(scope?.records || []));
+      document.getElementById("stat-blocks").textContent = formatNumber(scope?.blocks?.length || 0);
+      updateTargetOutput();
+    }
+
+    function getTotalOrders(records) {
+      return (records || []).reduce((sum, record) => sum + orderOf(record), 0);
+    }
+
+    function getPeopleCount() {
+      const value = Number(document.getElementById("people-input").value);
+      return Number.isInteger(value) && value > 0 ? value : 0;
+    }
+
+    function getBlockId(block) {
+      return block?.block_id || block?.id || "";
+    }
+
+    function buildBlockMap(blocks) {
+      return new Map((blocks || []).map((block) => [getBlockId(block), block]));
+    }
+
+    function canonicalBlockIdFromRecord(record) {
+      return normalizeText(record?.assignment_block_id || record?.block_id || record?.legacy_block_id || "");
+    }
+
+    function normalizeRecordForAssignment(record) {
+      const blockId = canonicalBlockIdFromRecord(record);
+      return {
+        ...record,
+        block_id: blockId,
+        assignment_block_id: blockId || record.assignment_block_id || ""
+      };
+    }
+
+    function blockOrdersFromRecords(records) {
+      const result = new Map();
+      for (const record of records || []) {
+        const blockId = canonicalBlockIdFromRecord(record);
+        if (!blockId) continue;
+        result.set(blockId, (result.get(blockId) || 0) + orderOf(record));
+      }
+      return result;
+    }
+
+    function normalizeBlocksWithOrders(blocks, records) {
+      const ordersByBlock = blockOrdersFromRecords(records);
+      const countsByBlock = new Map();
+      for (const record of records || []) {
+        const blockId = canonicalBlockIdFromRecord(record);
+        if (!blockId) continue;
+        countsByBlock.set(blockId, (countsByBlock.get(blockId) || 0) + 1);
+      }
+      return (blocks || []).map((block) => {
+        const blockId = getBlockId(block);
+        return {
+          ...block,
+          block_id: blockId,
+          orders: ordersByBlock.get(blockId) || asNumber(block.orders, 0),
+          address_count: countsByBlock.get(blockId) || asNumber(block.address_count, 0),
+          neighbors: Array.isArray(block.neighbors) ? block.neighbors.slice() : []
+        };
+      });
+    }
+
+    function recordTieBreak(a, b) {
+      const road = normalizeText(a.road_stem).localeCompare(normalizeText(b.road_stem), "ko", { numeric: true });
+      if (road) return road;
+      const main = asNumber(a.lot_main, 999999) - asNumber(b.lot_main, 999999);
+      if (main) return main;
+      const sub = asNumber(a.lot_sub, 999999) - asNumber(b.lot_sub, 999999);
+      if (sub) return sub;
+      return asNumber(a.id) - asNumber(b.id);
+    }
+
+    function sortRecordsWithinBlock(records, block, entryRecord = null) {
+      const remaining = [...(records || [])].sort(recordTieBreak);
+      if (remaining.length <= 2) return remaining;
+      const ordered = [];
+      let currentPoint = entryRecord || block?.centroid || null;
+      while (remaining.length) {
+        let bestIndex = 0;
+        for (let index = 1; index < remaining.length; index += 1) {
+          const candidate = remaining[index];
+          const best = remaining[bestIndex];
+          let compare = 0;
+          if (currentPoint) {
+            compare = recordDistance(currentPoint, candidate) - recordDistance(currentPoint, best);
+          } else {
+            const candidateFlow = -asNumber(candidate.lat) * 1000 + asNumber(candidate.lon);
+            const bestFlow = -asNumber(best.lat) * 1000 + asNumber(best.lon);
+            compare = candidateFlow - bestFlow;
+          }
+          if (Math.abs(compare) <= 25) compare = recordTieBreak(candidate, best);
+          if (compare < 0) bestIndex = index;
+        }
+        const next = remaining.splice(bestIndex, 1)[0];
+        ordered.push(next);
+        currentPoint = next;
+      }
+      return ordered;
+    }
+
+    function groupRecordsByBlock(records, blockMap) {
+      const groups = new Map();
+      for (const sourceRecord of records || []) {
+        const record = normalizeRecordForAssignment(sourceRecord);
+        if (!record.block_id || !blockMap.has(record.block_id)) continue;
+        if (!groups.has(record.block_id)) groups.set(record.block_id, []);
+        groups.get(record.block_id).push(record);
+      }
+      for (const [blockId, items] of groups.entries()) {
+        groups.set(blockId, sortRecordsWithinBlock(items, blockMap.get(blockId)));
+      }
+      return groups;
+    }
+
+    function createZone(personNo, target, minTarget, maxTarget) {
+      return {
+        id: personNo,
+        person: `인원 ${personNo}`,
+        color: ZONE_COLORS[(personNo - 1) % ZONE_COLORS.length],
+        target,
+        minTarget,
+        maxTarget,
+        orders: 0,
+        addressCount: 0,
+        blockCount: 0,
+        records: [],
+        addressIds: [],
+        blockIds: [],
+        qualityCost: 0,
+        maxJumpMeters: 0
+      };
+    }
+
+    function refreshZoneMetrics(zone) {
+      const blockIds = new Set();
+      let maxJump = 0;
+      for (let index = 1; index < zone.records.length; index += 1) {
+        maxJump = Math.max(maxJump, recordDistance(zone.records[index - 1], zone.records[index]));
+      }
+      for (const record of zone.records) {
+        const blockId = canonicalBlockIdFromRecord(record);
+        if (blockId) blockIds.add(blockId);
+      }
+      zone.orders = getTotalOrders(zone.records);
+      zone.addressCount = zone.records.length;
+      zone.addressIds = zone.records.map((record) => record.id);
+      zone.blockIds = [...blockIds];
+      zone.blockCount = blockIds.size;
+      zone.maxJumpMeters = maxJump;
+      zone.qualityCost =
+        hardBandViolationPenalty(zone.orders, zone.minTarget, zone.maxTarget) +
+        targetDeviationPenalty(zone.orders, zone.target) +
+        overflowPenalty(zone.orders, zone.maxTarget) +
+        jumpDistancePenalty(maxJump);
+      return zone;
+    }
+
+    function chooseStartBlock(blocks, unassignedBlockIds, entryPoint = null) {
+      const candidates = (blocks || [])
+        .filter((block) => unassignedBlockIds.has(block.block_id))
+        .filter((block) => asNumber(block.orders) > 0);
+      if (entryPoint) {
+        return candidates
+          .sort((a, b) => pointToBlockDistance(entryPoint, a) - pointToBlockDistance(entryPoint, b) || b.orders - a.orders || a.block_id.localeCompare(b.block_id, "ko", { numeric: true }))[0] || null;
+      }
+      const connected = candidates.filter((block) => (block.neighbors || []).some((edge) => unassignedBlockIds.has(edge.neighbor_block_id)));
+      const source = connected.length ? connected : candidates;
+      if (!source.length) return null;
+      const lons = source.map((block) => block.centroid.lon);
+      const lats = source.map((block) => block.centroid.lat);
+      const minLon = Math.min(...lons);
+      const maxLon = Math.max(...lons);
+      const minLat = Math.min(...lats);
+      const maxLat = Math.max(...lats);
+      const lonSpan = maxLon - minLon || 1;
+      const latSpan = maxLat - minLat || 1;
+      return source
+        .map((block) => {
+          const westToEast = (block.centroid.lon - minLon) / lonSpan;
+          const northToSouth = (maxLat - block.centroid.lat) / latSpan;
+          const directionRank = START_DIRECTION === "northwest_to_southeast"
+            ? westToEast + northToSouth
+            : westToEast;
+          const edgeRank = Math.min(westToEast, 1 - westToEast, northToSouth, 1 - northToSouth);
+          return { block, directionRank, edgeRank };
+        })
+        .sort((a, b) => a.directionRank - b.directionRank || a.edgeRank - b.edgeRank || b.block.orders - a.block.orders || a.block.block_id.localeCompare(b.block.block_id, "ko", { numeric: true }))[0].block;
+    }
+
+    function relationRank(relation) {
+      if (relation === "touches") return 0;
+      if (relation === "near") return 1;
+      if (relation === "centroid_near") return 2;
+      return 9;
+    }
+
+    function sortNeighborEdges(edges, blockMap) {
+      return [...(edges || [])].sort((a, b) => {
+        const leftBlock = blockMap.get(a.neighbor_block_id);
+        const rightBlock = blockMap.get(b.neighbor_block_id);
+        return relationRank(a.relation) - relationRank(b.relation) ||
+          asNumber(a.boundary_distance_meters, Infinity) - asNumber(b.boundary_distance_meters, Infinity) ||
+          asNumber(b.shared_boundary_length, 0) - asNumber(a.shared_boundary_length, 0) ||
+          asNumber(a.centroid_distance_meters, Infinity) - asNumber(b.centroid_distance_meters, Infinity) ||
+          asNumber(rightBlock?.orders, 0) - asNumber(leftBlock?.orders, 0) ||
+          String(a.neighbor_block_id).localeCompare(String(b.neighbor_block_id), "ko", { numeric: true });
+      });
+    }
+
+    function buildComponents(unassignedBlockIds, blockMap) {
+      const components = [];
+      const seen = new Set();
+      for (const blockId of unassignedBlockIds) {
+        if (seen.has(blockId)) continue;
+        const queue = [blockId];
+        seen.add(blockId);
+        const blocks = [];
+        while (queue.length) {
+          const currentId = queue.shift();
+          const block = blockMap.get(currentId);
+          if (!block) continue;
+          blocks.push(block);
+          for (const edge of block.neighbors || []) {
+            if (unassignedBlockIds.has(edge.neighbor_block_id) && !seen.has(edge.neighbor_block_id)) {
+              seen.add(edge.neighbor_block_id);
+              queue.push(edge.neighbor_block_id);
+            }
+          }
+        }
+        const orders = blocks.reduce((sum, block) => sum + asNumber(block.orders), 0);
+        const centroid = weightedBlockCentroid(blocks);
+        components.push({
+          id: `C${components.length}`,
+          blocks,
+          blockIds: blocks.map((block) => block.block_id),
+          orders,
+          centroid
+        });
+      }
+      return components;
+    }
+
+    function weightedBlockCentroid(blocks) {
+      const total = blocks.reduce((sum, block) => sum + Math.max(1, asNumber(block.orders)), 0) || 1;
+      return {
+        lat: blocks.reduce((sum, block) => sum + block.centroid.lat * Math.max(1, asNumber(block.orders)), 0) / total,
+        lon: blocks.reduce((sum, block) => sum + block.centroid.lon * Math.max(1, asNumber(block.orders)), 0) / total
+      };
+    }
+
+    function componentDistance(left, right, distanceCache = null) {
+      if (!left || !right || left === right) return 0;
+      const key = left.id < right.id ? `${left.id}|${right.id}` : `${right.id}|${left.id}`;
+      if (distanceCache?.has(key)) return distanceCache.get(key);
+      let best = Infinity;
+      for (const leftBlock of left.blocks || []) {
+        for (const rightBlock of right.blocks || []) {
+          best = Math.min(best, blockDistance(leftBlock, rightBlock));
+        }
+      }
+      if (distanceCache) distanceCache.set(key, best);
+      return best;
+    }
+
+    function buildRegularJumpClusters(components, distanceCache) {
+      const parent = components.map((_, index) => index);
+      const find = (node) => {
+        while (parent[node] !== node) {
+          parent[node] = parent[parent[node]];
+          node = parent[node];
+        }
+        return node;
+      };
+      const union = (left, right) => {
+        const rootLeft = find(left);
+        const rootRight = find(right);
+        if (rootLeft !== rootRight) parent[rootRight] = rootLeft;
+      };
+      for (let left = 0; left < components.length; left += 1) {
+        for (let right = left + 1; right < components.length; right += 1) {
+          if (componentDistance(components[left], components[right], distanceCache) <= REGULAR_JUMP_LIMIT_METERS) {
+            union(left, right);
+          }
+        }
+      }
+      const grouped = new Map();
+      components.forEach((component, index) => {
+        const root = find(index);
+        if (!grouped.has(root)) grouped.set(root, []);
+        grouped.get(root).push(component);
+      });
+      return [...grouped.values()].map((items, index) => {
+        const orders = items.reduce((sum, component) => sum + component.orders, 0);
+        const blocks = items.flatMap((component) => component.blocks);
+        return {
+          id: `G${index}`,
+          components: items,
+          orders,
+          blocks,
+          centroid: weightedBlockCentroid(blocks)
+        };
+      });
+    }
+
+    function orderRegularClusters(clusters) {
+      if (!clusters.length) return [];
+      const remaining = clusters.slice();
+      const minLon = Math.min(...remaining.map((cluster) => cluster.centroid.lon));
+      const maxLat = Math.max(...remaining.map((cluster) => cluster.centroid.lat));
+      let current = remaining
+        .sort((a, b) => {
+          const aRank = Math.abs(a.centroid.lon - minLon) + Math.abs(maxLat - a.centroid.lat);
+          const bRank = Math.abs(b.centroid.lon - minLon) + Math.abs(maxLat - b.centroid.lat);
+          return aRank - bRank || b.orders - a.orders;
+        })[0];
+      const ordered = [];
+      while (current) {
+        ordered.push(current);
+        remaining.splice(remaining.indexOf(current), 1);
+        if (!remaining.length) break;
+        current = remaining
+          .sort((a, b) => {
+            const da = haversineM(current.centroid.lat, current.centroid.lon, a.centroid.lat, a.centroid.lon);
+            const db = haversineM(current.centroid.lat, current.centroid.lon, b.centroid.lat, b.centroid.lon);
+            return da - db || b.orders - a.orders;
+          })[0];
+      }
+      return ordered;
+    }
+
+    function orderComponentsInCluster(cluster, distanceCache) {
+      const components = cluster.components || [];
+      if (components.length <= 1) return components.slice();
+      if (components.length > 12) {
+        const remaining = components.slice();
+        const ordered = [remaining.shift()];
+        while (remaining.length) {
+          const current = ordered[ordered.length - 1];
+          remaining.sort((a, b) => componentDistance(current, a, distanceCache) - componentDistance(current, b, distanceCache) || b.orders - a.orders);
+          ordered.push(remaining.shift());
+        }
+        return ordered;
+      }
+
+      const count = components.length;
+      const limit = 1 << count;
+      const dp = Array.from({ length: limit }, () => Array(count).fill(null));
+      for (let index = 0; index < count; index += 1) {
+        dp[1 << index][index] = { maxEdge: 0, total: 0, path: [index] };
+      }
+      for (let mask = 1; mask < limit; mask += 1) {
+        for (let last = 0; last < count; last += 1) {
+          const state = dp[mask][last];
+          if (!state) continue;
+          for (let next = 0; next < count; next += 1) {
+            if (mask & (1 << next)) continue;
+            const edge = componentDistance(components[last], components[next], distanceCache);
+            const nextMask = mask | (1 << next);
+            const candidate = {
+              maxEdge: Math.max(state.maxEdge, edge),
+              total: state.total + edge,
+              path: state.path.concat(next)
+            };
+            const existing = dp[nextMask][next];
+            if (!existing || candidate.maxEdge < existing.maxEdge || (candidate.maxEdge === existing.maxEdge && candidate.total < existing.total)) {
+              dp[nextMask][next] = candidate;
+            }
+          }
+        }
+      }
+      const full = limit - 1;
+      let best = null;
+      for (let last = 0; last < count; last += 1) {
+        const state = dp[full][last];
+        if (!state) continue;
+        if (!best || state.maxEdge < best.maxEdge || (state.maxEdge === best.maxEdge && state.total < best.total)) best = state;
+      }
+      return (best?.path || components.map((_, index) => index)).map((index) => components[index]);
+    }
+
+    function routeBlocksInComponent(component, blockMap, entryPoint = null) {
+      const unvisited = new Set(component.blockIds || component.blocks.map((block) => block.block_id));
+      const route = [];
+      let current = chooseStartBlock(component.blocks, unvisited, entryPoint);
+      while (current && unvisited.size) {
+        route.push(current.block_id);
+        unvisited.delete(current.block_id);
+        if (!unvisited.size) break;
+        const neighborIds = sortNeighborEdges(current.neighbors || [], blockMap)
+          .map((edge) => edge.neighbor_block_id)
+          .filter((blockId) => unvisited.has(blockId));
+        const nearIds = [...unvisited].filter((blockId) => blockDistance(current, blockMap.get(blockId)) <= REGULAR_JUMP_LIMIT_METERS);
+        const candidateIds = neighborIds.length ? neighborIds : (nearIds.length ? nearIds : [...unvisited]);
+        current = candidateIds
+          .map((blockId) => blockMap.get(blockId))
+          .filter(Boolean)
+          .sort((a, b) => blockDistance(current, a) - blockDistance(current, b) || b.orders - a.orders || a.block_id.localeCompare(b.block_id, "ko", { numeric: true }))[0] || null;
+      }
+      return route;
+    }
+
+    function buildBlockRouteFromClusters(clusters, blockMap, distanceCache) {
+      const route = [];
+      let entryPoint = null;
+      for (const cluster of orderRegularClusters(clusters)) {
+        for (const component of orderComponentsInCluster(cluster, distanceCache)) {
+          const componentRoute = routeBlocksInComponent(component, blockMap, entryPoint);
+          route.push(...componentRoute);
+          const lastBlock = componentRoute.length ? blockMap.get(componentRoute[componentRoute.length - 1]) : null;
+          entryPoint = lastBlock?.centroid || entryPoint;
+        }
+      }
+      return route;
+    }
+
+    function buildRouteRecords(blockRoute, recordsByBlock, blockMap) {
+      const route = [];
+      let entryRecord = null;
+      for (const blockId of blockRoute) {
+        const block = blockMap.get(blockId);
+        const records = sortRecordsWithinBlock(recordsByBlock.get(blockId) || [], block, entryRecord);
+        for (const record of records) {
+          route.push({ ...record, route_block_id: blockId, block_id: blockId, route_index: route.length });
+        }
+        if (records.length) entryRecord = records[records.length - 1];
+      }
+      return route;
+    }
+
+    function buildRouteBlocks(blockRoute, recordsByBlock, blockMap) {
+      const routeBlocks = [];
+      let entryRecord = null;
+      for (const blockId of blockRoute) {
+        const block = blockMap.get(blockId);
+        const records = sortRecordsWithinBlock(recordsByBlock.get(blockId) || [], block, entryRecord)
+          .map((record, index) => ({
+            ...record,
+            route_block_id: blockId,
+            block_id: blockId,
+            route_index: routeBlocks.length * 100000 + index
+          }));
+        if (!records.length) continue;
+        routeBlocks.push({ blockId, block, records });
+        entryRecord = records[records.length - 1];
+      }
+      return routeBlocks;
+    }
+
+    function flattenRouteBlocks(routeBlocks) {
+      return (routeBlocks || []).flatMap((routeBlock) => routeBlock.records || []);
+    }
+
+    function splitRouteByRegularJumps(routeRecords) {
+      const chunks = [];
+      let current = [];
+      for (const record of routeRecords || []) {
+        if (current.length && recordDistance(current[current.length - 1], record) > REGULAR_JUMP_LIMIT_METERS) {
+          chunks.push({ records: current, orders: getTotalOrders(current) });
+          current = [];
+        }
+        current.push(record);
+      }
+      if (current.length) chunks.push({ records: current, orders: getTotalOrders(current) });
+      return chunks;
+    }
+
+    function buildOrderPrefix(records) {
+      const prefix = [0];
+      for (const record of records || []) {
+        prefix.push(prefix[prefix.length - 1] + orderOf(record));
+      }
+      return prefix;
+    }
+
+    function routeOrdersBetween(prefix, start, end) {
+      return Math.max(0, (prefix[end] || 0) - (prefix[start] || 0));
+    }
+
+    function buildJumpPenaltyPrefix(records) {
+      const prefix = [0];
+      for (let index = 1; index < (records || []).length; index += 1) {
+        const distance = recordDistance(records[index - 1], records[index]);
+        prefix.push(prefix[prefix.length - 1] + jumpDistancePenalty(distance));
+      }
+      return prefix;
+    }
+
+    function routeJumpPenaltyBetween(prefix, start, end) {
+      if (end - start <= 1) return 0;
+      return Math.max(0, (prefix[end - 1] || 0) - (prefix[start] || 0));
+    }
+
+    function splitBoundaryPenalty(records, start) {
+      if (start <= 0 || start >= records.length) return 0;
+      const previousBlock = canonicalBlockIdFromRecord(records[start - 1]);
+      const currentBlock = canonicalBlockIdFromRecord(records[start]);
+      return previousBlock && previousBlock === currentBlock ? 2500 : 0;
+    }
+
+    function greedyPartitionAllRecords(records, peopleCount, target) {
+      const segments = Array.from({ length: peopleCount }, () => []);
+      if (!records.length || peopleCount <= 0) return segments;
+      let cursor = 0;
+      for (let person = 0; person < peopleCount; person += 1) {
+        const remainingPeople = peopleCount - person;
+        const remainingRecords = records.length - cursor;
+        if (remainingRecords <= 0) break;
+        if (remainingRecords <= remainingPeople) {
+          segments[person] = [records[cursor]];
+          cursor += 1;
+          continue;
+        }
+        let orders = 0;
+        const start = cursor;
+        while (cursor < records.length - (remainingPeople - 1)) {
+          const projected = orders + orderOf(records[cursor]);
+          if (cursor > start && Math.abs(projected - target) > Math.abs(orders - target)) break;
+          orders = projected;
+          cursor += 1;
+          if (orders >= target) break;
+        }
+        segments[person] = records.slice(start, cursor);
+      }
+      if (cursor < records.length) segments[segments.length - 1].push(...records.slice(cursor));
+      return segments;
+    }
+
+    function partitionAllRecords(records, peopleCount, target, minTarget, maxTarget) {
+      const items = records || [];
+      if (peopleCount <= 0) return [];
+      if (!items.length) return Array.from({ length: peopleCount }, () => []);
+      const people = Math.min(peopleCount, items.length);
+      const prefix = buildOrderPrefix(items);
+      const jumpPrefix = buildJumpPenaltyPrefix(items);
+      const states = Array.from({ length: people + 1 }, () => new Map());
+      states[0].set(0, { cost: 0, previous: null });
+      const segmentCost = (orders, start, end) => {
+        const deviation = orders - target;
+        const under = Math.max(0, minTarget - orders);
+        const over = Math.max(0, orders - maxTarget);
+        const bandOverflow = under + over;
+        return (
+          deviation * deviation * 30 +
+          bandOverflow * bandOverflow * 2500 +
+          bandOverflow * 60000 +
+          routeJumpPenaltyBetween(jumpPrefix, start, end) +
+          splitBoundaryPenalty(items, start)
+        );
+      };
+
+      for (let person = 1; person <= people; person += 1) {
+        const minEnd = person;
+        const maxEnd = items.length - (people - person);
+        for (const [start, previousState] of states[person - 1].entries()) {
+          for (let end = Math.max(start + 1, minEnd); end <= maxEnd; end += 1) {
+            const orders = routeOrdersBetween(prefix, start, end);
+            const cost = previousState.cost + segmentCost(orders, start, end);
+            const existing = states[person].get(end);
+            if (!existing || cost < existing.cost) {
+              states[person].set(end, { cost, previous: start });
+            }
+          }
+        }
+      }
+
+      if (!states[people].has(items.length)) {
+        return greedyPartitionAllRecords(items, peopleCount, target);
+      }
+
+      const segments = [];
+      let end = items.length;
+      for (let person = people; person > 0; person -= 1) {
+        const stateValue = states[person].get(end);
+        const start = stateValue.previous;
+        segments.unshift(items.slice(start, end));
+        end = start;
+      }
+      while (segments.length < peopleCount) segments.push([]);
+      return segments;
+    }
+
+    function bandOverflowOrders(orders, minTarget, maxTarget) {
+      return Math.max(0, minTarget - orders) + Math.max(0, orders - maxTarget);
+    }
+
+    function shouldStartNextPersonBeforeRecord(zone, record, target, minTarget, maxTarget) {
+      if (!zone?.records?.length) return false;
+      const currentOrders = zone.orders || getTotalOrders(zone.records);
+      const projectedOrders = currentOrders + orderOf(record);
+      const currentOverflow = bandOverflowOrders(currentOrders, minTarget, maxTarget);
+      const projectedOverflow = bandOverflowOrders(projectedOrders, minTarget, maxTarget);
+      if (projectedOrders > maxTarget && currentOverflow <= projectedOverflow) return true;
+      if (currentOrders >= minTarget && Math.abs(currentOrders - target) <= Math.abs(projectedOrders - target)) return true;
+      return false;
+    }
+
+    function shouldStartNextPersonAfterBlock(zone, nextBlockRecords, target, minTarget, maxTarget) {
+      if (!zone?.records?.length || !nextBlockRecords?.length) return false;
+      const currentOrders = zone.orders || getTotalOrders(zone.records);
+      const nextBlockOrders = getTotalOrders(nextBlockRecords);
+      const projectedOrders = currentOrders + nextBlockOrders;
+      if (currentOrders >= target) return true;
+      if (currentOrders >= minTarget && projectedOrders > maxTarget) return true;
+      if (currentOrders >= minTarget && Math.abs(currentOrders - target) <= Math.abs(projectedOrders - target)) return true;
+      return false;
+    }
+
+    function markResidualRouteTail(routeBlocks, blockIndex, recordIndex, residualRecords, reason) {
+      for (let blockCursor = blockIndex; blockCursor < routeBlocks.length; blockCursor += 1) {
+        const records = routeBlocks[blockCursor].records || [];
+        const startIndex = blockCursor === blockIndex ? recordIndex : 0;
+        for (let index = startIndex; index < records.length; index += 1) {
+          residualRecords.push({ ...records[index], residual_reason: reason });
+        }
+      }
+    }
+
+    function maxRecordJump(records) {
+      let maxJump = 0;
+      for (let index = 1; index < (records || []).length; index += 1) {
+        maxJump = Math.max(maxJump, recordDistance(records[index - 1], records[index]));
+      }
+      return maxJump;
+    }
+
+    function buildSequentialUnits(routeBlocks, target, minTarget, maxTarget) {
+      const units = [];
+      for (const routeBlock of routeBlocks || []) {
+        const blockRecords = routeBlock.records || [];
+        const blockOrders = getTotalOrders(blockRecords);
+        if (blockOrders <= maxTarget) {
+          units.push({
+            blockId: routeBlock.blockId,
+            records: blockRecords,
+            orders: blockOrders,
+            first: blockRecords[0],
+            last: blockRecords[blockRecords.length - 1],
+            internalMaxJump: maxRecordJump(blockRecords)
+          });
+          continue;
+        }
+
+        let current = [];
+        let currentOrders = 0;
+        for (const record of blockRecords) {
+          const projectedOrders = currentOrders + orderOf(record);
+          const lastRecord = current[current.length - 1];
+          const mustSplitForDistance = lastRecord && recordDistance(lastRecord, record) > REGULAR_JUMP_LIMIT_METERS;
+          const shouldSplitForBalance =
+            current.length &&
+            currentOrders >= minTarget &&
+            (projectedOrders > maxTarget || Math.abs(currentOrders - target) <= Math.abs(projectedOrders - target));
+          if (mustSplitForDistance || shouldSplitForBalance) {
+            units.push({
+              blockId: routeBlock.blockId,
+              records: current,
+              orders: currentOrders,
+              first: current[0],
+              last: current[current.length - 1],
+              internalMaxJump: maxRecordJump(current)
+            });
+            current = [];
+            currentOrders = 0;
+          }
+          current.push(record);
+          currentOrders += orderOf(record);
+        }
+        if (current.length) {
+          units.push({
+            blockId: routeBlock.blockId,
+            records: current,
+            orders: currentOrders,
+            first: current[0],
+            last: current[current.length - 1],
+            internalMaxJump: maxRecordJump(current)
+          });
+        }
+      }
+      return units.filter((unit) => unit.records.length);
+    }
+
+    function buildSequentialRecordUnits(routeBlocks) {
+      const units = [];
+      for (const routeBlock of routeBlocks || []) {
+        for (const record of routeBlock.records || []) {
+          units.push({
+            blockId: routeBlock.blockId,
+            records: [record],
+            orders: orderOf(record),
+            first: record,
+            last: record,
+            internalMaxJump: 0
+          });
+        }
+      }
+      return units;
+    }
+
+    function removeSmallDisconnectedUnitChunks(units, minTarget) {
+      const chunks = [];
+      let current = [];
+      for (const unit of units || []) {
+        const previousUnit = current[current.length - 1];
+        if (previousUnit && recordDistance(previousUnit.last, unit.first) > REGULAR_JUMP_LIMIT_METERS) {
+          chunks.push(current);
+          current = [];
+        }
+        current.push(unit);
+      }
+      if (current.length) chunks.push(current);
+
+      const keptUnits = [];
+      const residualRecords = [];
+      for (const chunk of chunks) {
+        const orders = chunk.reduce((sum, unit) => sum + unit.orders, 0);
+        if (orders < minTarget) {
+          for (const unit of chunk) {
+            for (const record of unit.records) {
+              residualRecords.push({ ...record, residual_reason: "over_500m_small_chunk" });
+            }
+          }
+        } else {
+          keptUnits.push(...chunk);
+        }
+      }
+      return { keptUnits, residualRecords };
+    }
+
+    function assignUnitsBySequentialCuts(units, zones, target, minTarget, maxTarget) {
+      const unitCount = units.length;
+      if (!unitCount) return [];
+      const peopleCount = zones.length;
+      const prefixOrders = [0];
+      for (const unit of units) prefixOrders.push(prefixOrders[prefixOrders.length - 1] + unit.orders);
+      const states = Array.from({ length: peopleCount + 1 }, () => new Map());
+      states[0].set(0, { cost: 0, previous: null });
+
+      for (let person = 1; person <= peopleCount; person += 1) {
+        for (const [start, previousState] of states[person - 1].entries()) {
+          let segmentMaxJump = 0;
+          for (let end = start + 1; end <= unitCount; end += 1) {
+            const unit = units[end - 1];
+            segmentMaxJump = Math.max(segmentMaxJump, unit.internalMaxJump || 0);
+            if (end - 1 > start) {
+              segmentMaxJump = Math.max(segmentMaxJump, recordDistance(units[end - 2].last, unit.first));
+            }
+            if (segmentMaxJump > REGULAR_JUMP_LIMIT_METERS) break;
+
+            const orders = prefixOrders[end] - prefixOrders[start];
+            const deviation = orders - target;
+            const overflow = bandOverflowOrders(orders, minTarget, maxTarget);
+            const splitSameBlockPenalty = start > 0 && units[start - 1].blockId === units[start].blockId ? 250000 : 0;
+            const cost =
+              previousState.cost +
+              deviation * deviation * 45 +
+              overflow * overflow * 4500 +
+              overflow * 90000 +
+              segmentMaxJump * 6 +
+              splitSameBlockPenalty;
+            const existing = states[person].get(end);
+            if (!existing || cost < existing.cost) {
+              states[person].set(end, { cost, previous: start });
+            }
+          }
+        }
+      }
+
+      let bestPerson = -1;
+      let bestState = null;
+      for (let person = 1; person <= peopleCount; person += 1) {
+        const stateValue = states[person].get(unitCount);
+        if (!stateValue) continue;
+        const emptyPenalty = (peopleCount - person) * 100000000;
+        const candidateCost = stateValue.cost + emptyPenalty;
+        if (!bestState || candidateCost < bestState.costWithEmptyPenalty) {
+          bestPerson = person;
+          bestState = { ...stateValue, costWithEmptyPenalty: candidateCost };
+        }
+      }
+
+      let assignedUntil = unitCount;
+      if (bestPerson < 0) {
+        assignedUntil = 0;
+        for (let person = peopleCount; person >= 1; person -= 1) {
+          for (const [end, stateValue] of states[person].entries()) {
+            if (end > assignedUntil) {
+              bestPerson = person;
+              bestState = stateValue;
+              assignedUntil = end;
+            }
+          }
+        }
+      }
+
+      const segments = [];
+      let end = assignedUntil;
+      for (let person = bestPerson; person > 0; person -= 1) {
+        const stateValue = states[person].get(end);
+        const start = stateValue.previous;
+        segments.unshift(units.slice(start, end));
+        end = start;
+      }
+
+      for (let index = 0; index < segments.length && index < zones.length; index += 1) {
+        zones[index].records = segments[index].flatMap((unit) => unit.records);
+        refreshZoneMetrics(zones[index]);
+      }
+
+      const residualRecords = [];
+      for (let index = assignedUntil; index < unitCount; index += 1) {
+        for (const record of units[index].records) {
+          residualRecords.push({ ...record, residual_reason: "over_500m_move" });
+        }
+      }
+      return residualRecords;
+    }
+
+    function assignRouteBlocksSequential(routeBlocks, zones, target, minTarget, maxTarget) {
+      const allUnits = buildSequentialRecordUnits(routeBlocks);
+      const { keptUnits, residualRecords: disconnectedResidualRecords } = removeSmallDisconnectedUnitChunks(allUnits, minTarget);
+      const unitResidualRecords = assignUnitsBySequentialCuts(keptUnits, zones, target, minTarget, maxTarget);
+      if (unitResidualRecords.length || disconnectedResidualRecords.length || zones.some((zone) => zone.records.length)) {
+        return disconnectedResidualRecords.concat(unitResidualRecords);
+      }
+
+      const residualRecords = [];
+      let personIndex = 0;
+      let assignedOrders = 0;
+      const totalRouteOrders = getTotalOrders(flattenRouteBlocks(routeBlocks));
+
+      const moveToNextPerson = () => {
+        if (personIndex + 1 >= zones.length) return false;
+        personIndex += 1;
+        return true;
+      };
+      const canMoveWithoutStarvingRemainder = () => {
+        const remainingPeople = zones.length - personIndex - 1;
+        if (remainingPeople <= 0) return false;
+        const remainingOrders = totalRouteOrders - assignedOrders;
+        return remainingOrders >= minTarget * remainingPeople;
+      };
+
+      for (let blockIndex = 0; blockIndex < routeBlocks.length; blockIndex += 1) {
+        const routeBlock = routeBlocks[blockIndex];
+        const records = routeBlock.records || [];
+        let recordIndex = 0;
+
+        while (recordIndex < records.length) {
+          const zone = zones[personIndex];
+          const record = records[recordIndex];
+          if (!zone) {
+            markResidualRouteTail(routeBlocks, blockIndex, recordIndex, residualRecords, "no_person_capacity");
+            return residualRecords;
+          }
+
+          refreshZoneMetrics(zone);
+          const lastRecord = zone.records[zone.records.length - 1];
+          if (lastRecord && recordDistance(lastRecord, record) > REGULAR_JUMP_LIMIT_METERS) {
+            if (moveToNextPerson()) continue;
+            markResidualRouteTail(routeBlocks, blockIndex, recordIndex, residualRecords, "over_500m_move");
+            return residualRecords;
+          }
+
+          if (
+            shouldStartNextPersonBeforeRecord(zone, record, target, minTarget, maxTarget) &&
+            canMoveWithoutStarvingRemainder() &&
+            moveToNextPerson()
+          ) {
+            continue;
+          }
+
+          zone.records.push(record);
+          assignedOrders += orderOf(record);
+          refreshZoneMetrics(zone);
+          recordIndex += 1;
+        }
+
+        const zone = zones[personIndex];
+        const nextBlockRecords = routeBlocks[blockIndex + 1]?.records || [];
+        if (
+          shouldStartNextPersonAfterBlock(zone, nextBlockRecords, target, minTarget, maxTarget) &&
+          canMoveWithoutStarvingRemainder()
+        ) {
+          moveToNextPerson();
+        }
+      }
+
+      return residualRecords;
+    }
+
+    function chunkOptions(chunk, peopleCount, target, minTarget, maxTarget) {
+      const records = chunk.records || [];
+      const prefix = buildOrderPrefix(records);
+      const total = prefix[prefix.length - 1] || 0;
+      const options = [{
+        people: 0,
+        end: 0,
+        keepOrders: 0,
+        residualOrders: total,
+        cost: total * 1000000
+      }];
+
+      const feasibleEndsByPeople = Array.from({ length: peopleCount + 1 }, () => new Set());
+      feasibleEndsByPeople[0].add(0);
+      for (let people = 1; people <= peopleCount; people += 1) {
+        for (const start of feasibleEndsByPeople[people - 1]) {
+          for (let end = start + 1; end <= records.length; end += 1) {
+            const orders = routeOrdersBetween(prefix, start, end);
+            if (orders > maxTarget) break;
+            if (orders >= minTarget) feasibleEndsByPeople[people].add(end);
+          }
+        }
+      }
+
+      for (let people = 1; people <= peopleCount; people += 1) {
+        let best = null;
+        for (const end of feasibleEndsByPeople[people]) {
+          const orders = routeOrdersBetween(prefix, 0, end);
+          const residualOrders = total - orders;
+          const candidate = {
+            people,
+            end,
+            keepOrders: orders,
+            residualOrders,
+            cost: residualOrders * 1000000 + Math.abs(orders - people * target) * 100
+          };
+          if (!best || candidate.residualOrders < best.residualOrders || (candidate.residualOrders === best.residualOrders && candidate.cost < best.cost)) {
+            best = candidate;
+          }
+        }
+        if (best) options.push(best);
+      }
+      return options;
+    }
+
+    function chooseChunkPlan(chunks, peopleCount, target, minTarget, maxTarget) {
+      let states = new Map([[0, { cost: 0, path: [] }]]);
+      for (let index = 0; index < chunks.length; index += 1) {
+        const nextStates = new Map();
+        for (const [usedPeople, stateValue] of states.entries()) {
+          for (const option of chunkOptions(chunks[index], peopleCount, target, minTarget, maxTarget)) {
+            const nextPeople = usedPeople + option.people;
+            if (nextPeople > peopleCount) continue;
+            const nextCost = stateValue.cost + option.cost;
+            const existing = nextStates.get(nextPeople);
+            if (!existing || nextCost < existing.cost) {
+              nextStates.set(nextPeople, {
+                cost: nextCost,
+                path: stateValue.path.concat({ chunkIndex: index, option })
+              });
+            }
+          }
+        }
+        states = nextStates;
+      }
+      if (states.has(peopleCount)) return states.get(peopleCount).path;
+      const fallback = [...states.entries()].sort((a, b) => {
+        const peopleGap = Math.abs(peopleCount - b[0]) - Math.abs(peopleCount - a[0]);
+        return peopleGap || a[1].cost - b[1].cost;
+      })[0];
+      return fallback?.[1]?.path || [];
+    }
+
+    function partitionKeptRecords(records, people, target, minTarget, maxTarget) {
+      if (people <= 0) return [];
+      const prefix = buildOrderPrefix(records);
+      const states = Array.from({ length: people + 1 }, () => new Map());
+      states[0].set(0, { cost: 0, previous: null });
+      for (let person = 1; person <= people; person += 1) {
+        for (const [start, previousState] of states[person - 1].entries()) {
+          for (let end = start + 1; end <= records.length; end += 1) {
+            const orders = routeOrdersBetween(prefix, start, end);
+            if (orders > maxTarget) break;
+            if (orders >= minTarget) {
+              const cost = previousState.cost + targetDeviationPenalty(orders, target);
+              const existing = states[person].get(end);
+              if (!existing || cost < existing.cost) {
+                states[person].set(end, { cost, previous: start });
+              }
+            }
+          }
+        }
+      }
+      if (states[people].has(records.length)) {
+        const segments = [];
+        let end = records.length;
+        for (let person = people; person > 0; person -= 1) {
+          const stateValue = states[person].get(end);
+          const start = stateValue.previous;
+          segments.unshift(records.slice(start, end));
+          end = start;
+        }
+        return segments;
+      }
+
+      const segments = [];
+      let cursor = 0;
+      for (let person = 0; person < people; person += 1) {
+        const isLast = person === people - 1;
+        let end = cursor;
+        let orders = 0;
+        while (end < records.length && (isLast || orders < target)) {
+          const projected = orders + orderOf(records[end]);
+          if (!isLast && orders >= minTarget && projected > maxTarget) break;
+          orders = projected;
+          end += 1;
+          if (!isLast && orders >= maxTarget) break;
+        }
+        segments.push(records.slice(cursor, end));
+        cursor = end;
+      }
+      if (cursor < records.length) segments[segments.length - 1].push(...records.slice(cursor));
+      return segments;
+    }
+
+    function assignByShpBlockSequential(records, blocks, peopleCount) {
+      const normalizedRecords = (records || []).map(normalizeRecordForAssignment);
+      const residualRecords = [];
+      const assignableRecords = [];
+      for (const record of normalizedRecords) {
+        if (record.match_type === "unmatched" || !record.block_id) {
+          residualRecords.push({ ...record, residual_reason: "unmatched_polygon" });
+        } else {
+          assignableRecords.push(record);
+        }
+      }
+
+      const normalizedBlocks = normalizeBlocksWithOrders(blocks, assignableRecords);
+      const blockMap = buildBlockMap(normalizedBlocks);
+      const recordsByBlock = groupRecordsByBlock(assignableRecords, blockMap);
+      const assignableBlockIds = new Set(
+        normalizedBlocks
+          .filter((block) => asNumber(block.orders) > 0 && recordsByBlock.has(block.block_id))
+          .map((block) => block.block_id)
+      );
+
+      const components = buildComponents(assignableBlockIds, blockMap);
+      const distanceCache = new Map();
+      const regularClusters = buildRegularJumpClusters(components, distanceCache);
+      const blockRoute = buildBlockRouteFromClusters(regularClusters, blockMap, distanceCache);
+      const routeBlocks = buildRouteBlocks(blockRoute, recordsByBlock, blockMap);
+      const routeRecords = flattenRouteBlocks(routeBlocks);
+      const routedIds = new Set(routeRecords.map((record) => record.id));
+      for (const record of assignableRecords) {
+        if (!routedIds.has(record.id)) {
+          residualRecords.push({ ...record, residual_reason: "not_routed" });
+        }
+      }
+
+      const preliminaryTarget = getTotalOrders(routeRecords) / peopleCount;
+      const preliminaryMinTarget = Math.floor(preliminaryTarget * 0.9);
+      const allUnits = buildSequentialRecordUnits(routeBlocks);
+      const { keptUnits, residualRecords: disconnectedResidualRecords } =
+        removeSmallDisconnectedUnitChunks(allUnits, preliminaryMinTarget);
+      residualRecords.push(...disconnectedResidualRecords);
+
+      const assignableOrders = keptUnits.reduce((sum, unit) => sum + unit.orders, 0);
+      const target = assignableOrders / peopleCount;
+      const minTarget = Math.floor(target * 0.9);
+      const maxTarget = Math.ceil(target * 1.1);
+      const zones = Array.from({ length: peopleCount }, (_, index) => createZone(index + 1, target, minTarget, maxTarget));
+      residualRecords.push(...assignUnitsBySequentialCuts(keptUnits, zones, target, minTarget, maxTarget));
+      for (const zone of zones) refreshZoneMetrics(zone);
+
+      return finalizeAssignment(zones, assignableRecords, residualRecords, normalizedBlocks, target, minTarget, maxTarget);
+    }
+
+    function finalizeAssignment(zones, assignableRecords, residualRecords, blocks, target, minTarget, maxTarget) {
+      const residualDedup = [...new Map(residualRecords.map((record) => [record.id, record])).values()];
+      const residualIds = new Set(residualDedup.map((record) => record.id));
+      const workingZones = zones.map((zone) => {
+        const nextZone = createZone(zone.id, target, minTarget, maxTarget);
+        nextZone.color = zone.color;
+        nextZone.records = (zone.records || []).filter((record) => !residualIds.has(record.id));
+        return refreshZoneMetrics(nextZone);
+      });
+      const assignedIds = new Map();
+      for (const zone of workingZones) {
+        refreshZoneMetrics(zone);
+        for (const record of zone.records) {
+          assignedIds.set(record.id, (assignedIds.get(record.id) || 0) + 1);
+        }
+      }
+
+      const duplicateIds = [...assignedIds.entries()].filter(([, count]) => count > 1).map(([id]) => id);
+      const missing = (assignableRecords || []).filter((record) => !assignedIds.has(record.id) && !residualIds.has(record.id));
+      const bandViolations = workingZones.filter((zone) => zone.orders > 0 && (zone.orders < minTarget || zone.orders > maxTarget));
+      const reentryViolations = findBlockReentryViolations(workingZones);
+      const longJumpZones = workingZones.filter((zone) => zone.maxJumpMeters > REGULAR_JUMP_LIMIT_METERS);
+      return {
+        zones: workingZones,
+        residualRecords: residualDedup,
+        blocks,
+        target,
+        minTarget,
+        maxTarget,
+        validation: {
+          duplicateIds,
+          missingCount: missing.length,
+          bandViolations,
+          reentryViolations,
+          longJumpZones
+        }
+      };
+    }
+
+    function findBlockReentryViolations(zones) {
+      const seenCompleted = new Set();
+      const activeBlocks = new Set();
+      const violations = [];
+      let previousBlock = "";
+      for (const zone of zones) {
+        for (const record of zone.records || []) {
+          const blockId = canonicalBlockIdFromRecord(record);
+          if (!blockId) continue;
+          if (blockId !== previousBlock) {
+            if (previousBlock) {
+              seenCompleted.add(previousBlock);
+              activeBlocks.delete(previousBlock);
+            }
+            if (seenCompleted.has(blockId)) {
+              violations.push({ block_id: blockId, zone_id: zone.id });
+            }
+            activeBlocks.add(blockId);
+            previousBlock = blockId;
+          }
+        }
+      }
+      return violations;
+    }
+
+    function buildAssignmentMessage(result) {
+      const assignedOrders = result.zones.reduce((sum, zone) => sum + zone.orders, 0);
+      const residualOrders = getTotalOrders(result.residualRecords);
+      const messages = [
+        `배정 완료 / 자동 배정 ${formatNumber(assignedOrders)}건 / 잔여오더 ${formatNumber(residualOrders)}건`,
+        `허용 범위 ${formatNumber(result.minTarget)}~${formatNumber(result.maxTarget)}건`
+      ];
+      if (result.validation.duplicateIds.length) messages.push(`중복 배정 ${result.validation.duplicateIds.length}건 확인 필요`);
+      if (result.validation.missingCount) messages.push(`누락 ${result.validation.missingCount}건 확인 필요`);
+      if (result.validation.bandViolations.length) messages.push(`±10% 범위 밖 인원 ${result.validation.bandViolations.length}명`);
+      if (result.validation.reentryViolations.length) messages.push(`블럭 되돌아감 ${result.validation.reentryViolations.length}건`);
+      if (result.validation.longJumpZones.length) messages.push(`500m 초과 내부 이동 ${result.validation.longJumpZones.length}명`);
+      return messages.join("\n");
+    }
+
+    async function runAssignment() {
+      const scope = getScope();
+      if (!scope) {
+        setStatus("선택한 센터/월 데이터가 없습니다.", true);
+        return;
+      }
+      const peopleCount = getPeopleCount();
+      if (!peopleCount) {
+        setStatus("인원은 1 이상의 정수로 입력하세요.", true);
+        return;
+      }
+      showLoading("1/3 block_id, polygon neighbor, 잔여오더 후보를 정리하는 중입니다.");
+      await nextFrame();
+      try {
+        setLoadingMessage("2/3 activeBlock 순차 배정을 실행하는 중입니다.");
+        await nextFrame();
+        const result = assignByShpBlockSequential(scope.records || [], scope.blocks || [], peopleCount);
+        setLoadingMessage("3/3 검증 결과와 지도 표시를 갱신하는 중입니다.");
+        await nextFrame();
+        state.currentAssignments = result.zones;
+        state.residualRecords = result.residualRecords;
+        state.residualRecordIdSet = new Set(result.residualRecords.map((record) => record.id));
+        state.assignmentZoneMap = new Map(result.zones.map((zone) => [zone.id, zone]));
+        state.zoneByRecordId = new Map();
+        for (const zone of result.zones) {
+          for (const record of zone.records) state.zoneByRecordId.set(record.id, zone.id);
+        }
+        updateBandSummary(result);
+        renderAssignmentTable(result.zones);
+        updateRemainingButton();
+        clearSelectedOverlays();
+        state.selectedZoneId = null;
+        renderMarkers();
+        setStatus(buildAssignmentMessage(result), Boolean(
+          result.validation.duplicateIds.length ||
+          result.validation.missingCount ||
+          result.validation.reentryViolations.length
+        ));
+      } catch (error) {
+        console.error(error);
+        setStatus(`배정 실패: ${error.message}`, true);
+      } finally {
+        hideLoading();
+      }
+    }
+
+    function updateBandSummary(result) {
+      const band = document.getElementById("band-summary");
+      if (!result) {
+        band.textContent = "허용 범위 -";
+        return;
+      }
+      const within = result.zones.filter((zone) => zone.orders >= result.minTarget && zone.orders <= result.maxTarget).length;
+      band.textContent = `목표 ${formatNumber(result.target)}건 / 허용 ${formatNumber(result.minTarget)}~${formatNumber(result.maxTarget)}건 / 범위 충족 ${within}/${result.zones.length}`;
+    }
+
+    function renderAssignmentTable(zones) {
+      const table = document.getElementById("assignment-table");
+      if (!zones?.length) {
+        table.innerHTML = `<div class="small">아직 배정 결과가 없습니다.</div>`;
+        return;
+      }
+      table.innerHTML = zones.map((zone) => {
+        const pct = zone.target ? ((zone.orders - zone.target) / zone.target * 100) : 0;
+        const active = state.selectedZoneId === zone.id ? "active" : "";
+        return `
+          <button type="button" class="zone-row ${active}" data-zone-id="${zone.id}">
+            <div class="zone-line">
+              <span><span class="swatch" style="background:${zone.color}"></span>${zone.person}</span>
+              <strong>${formatNumber(zone.orders)}건</strong>
+            </div>
+            <div class="small">${zone.addressCount}주소 · ${zone.blockCount}블럭 · 목표 대비 ${pct >= 0 ? "+" : ""}${pct.toFixed(1)}% · 최대 이동 ${formatNumber(zone.maxJumpMeters)}m</div>
+          </button>
+        `;
+      }).join("");
+      table.querySelectorAll(".zone-row").forEach((row) => {
+        row.addEventListener("click", () => selectZone(Number(row.dataset.zoneId)));
+      });
+    }
+
+    function selectZone(zoneId) {
+      const zone = state.assignmentZoneMap.get(zoneId);
+      if (!zone) return;
+      if (state.selectedZoneId === zoneId && !state.selectedRecordId) {
+        clearSelection();
+        return;
+      }
+      state.selectedZoneId = zoneId;
+      state.selectedRecordId = null;
+      renderAssignmentTable(state.currentAssignments);
+      drawZoneOverlays(zone);
+      fitRecords(zone.records);
+      renderZoneDetail(zone);
+      renderMarkers();
+    }
+
+    function renderZoneDetail(zone) {
+      document.getElementById("detail-title").textContent = zone.person;
+      document.getElementById("detail-subtitle").textContent = `${formatNumber(zone.orders)}건 · ${zone.addressCount}주소 · ${zone.blockCount}블럭`;
+      const rows = zone.records.slice(0, 350).map((record, index) => recordRowHtml(record, index + 1)).join("");
+      const more = zone.records.length > 350 ? `<div class="small">표시는 350개 주소까지만 제한됩니다.</div>` : "";
+      document.getElementById("detail-content").innerHTML = `
+        <div class="band">목표 ${formatNumber(zone.target)}건 / 허용 ${formatNumber(zone.minTarget)}~${formatNumber(zone.maxTarget)}건 / 품질값 ${formatNumber(zone.qualityCost)}</div>
+        <div class="record-list">${rows || `<div class="small">주소가 없습니다.</div>`}</div>
+        ${more}
+      `;
+      bindRecordRows();
+      showDetailPanel();
+    }
+
+    function recordRowHtml(record, sequence = "") {
+      const active = state.selectedRecordId === record.id ? "active" : "";
+      const title = normalizeText(record.address || record.road_address || record.jibun_address || `주소 ${record.id}`);
+      const meta = [
+        record.dong || "-",
+        record.road_stem || "-",
+        `호수 ${formatHosu(record)}`
+      ].map(escapeHtml).join(" · ");
+      return `
+        <button type="button" class="record-row ${active}" data-record-id="${record.id}">
+          <div class="zone-line">
+            <span>${sequence ? `${sequence}. ` : ""}${escapeHtml(title)}</span>
+            <strong>${formatNumber(record.orders)}건</strong>
+          </div>
+          <div class="small">${meta}</div>
+        </button>
+      `;
+    }
+
+    function bindRecordRows() {
+      document.querySelectorAll(".record-row[data-record-id]").forEach((row) => {
+        row.addEventListener("click", () => {
+          const record = state.currentRecordMap.get(Number(row.dataset.recordId));
+          if (record) selectRecord(record);
+        });
+      });
+    }
+
+    function selectRecord(record) {
+      if (state.selectedRecordId === record.id) {
+        clearSelection();
+        return;
+      }
+      state.selectedRecordId = record.id;
+      state.selectedZoneId = null;
+      renderAssignmentTable(state.currentAssignments);
+      drawRecordOverlay(record);
+      renderRecordDetail(record);
+      if (state.map) {
+        state.map.setZoom(Math.max(state.map.getZoom(), 17), false);
+        state.map.panTo(new naver.maps.LatLng(record.lat, record.lon));
+      }
+      renderMarkers();
+    }
+
+    function renderRecordDetail(record) {
+      const zone = state.zoneByRecordId.has(record.id) ? state.assignmentZoneMap.get(state.zoneByRecordId.get(record.id)) : null;
+      document.getElementById("detail-title").textContent = record.address || "주소 상세";
+      document.getElementById("detail-subtitle").textContent = zone ? `${zone.person} 배정` : (state.residualRecordIdSet.has(record.id) ? "잔여오더" : "미배정");
+      const details = [
+        ["오더", `${formatNumber(record.orders)}건`],
+        ["센터/월", `${record.center || "-"} / ${record.month || "-"}`],
+        ["동", record.dong || "-"],
+        ["도로명", record.road_stem || "-"],
+        ["지번", `${record.lot_main ?? "-"}-${record.lot_sub ?? "0"}`],
+        ["호수", formatHosu(record)],
+        ["건물번호", formatListValue(record.building_numbers) || "-"],
+        ["용도", formatListValue(record.use_counts) || "-"],
+        ["설치", formatListValue(record.install_counts) || "-"],
+        ["세부", formatListValue(record.specific_counts) || "-"],
+        ["도로명주소", record.road_address || "-"],
+        ["지번주소", record.jibun_address || "-"]
+      ];
+      document.getElementById("detail-content").innerHTML = `
+        <div class="record-list">
+          ${details.map(([key, value]) => `
+            <div class="record-row" style="cursor:default">
+              <div class="zone-line"><span>${escapeHtml(key)}</span><strong>${escapeHtml(value)}</strong></div>
+            </div>
+          `).join("")}
+        </div>
+      `;
+      showDetailPanel();
+    }
+
+    function renderResidualDetail() {
+      document.getElementById("detail-title").textContent = "잔여오더";
+      document.getElementById("detail-subtitle").textContent = `${state.residualRecords.length}주소 · ${formatNumber(getTotalOrders(state.residualRecords))}건`;
+      const rows = state.residualRecords.slice(0, 500).map((record, index) => recordRowHtml(record, index + 1)).join("");
+      document.getElementById("detail-content").innerHTML = `<div class="record-list">${rows || `<div class="small">잔여오더가 없습니다.</div>`}</div>`;
+      bindRecordRows();
+      showDetailPanel();
+      fitRecords(state.residualRecords);
+    }
+
+    function markerIcon(color, size = 12) {
+      const key = `${color}-${size}`;
+      if (state.cachedIcons.has(key)) return state.cachedIcons.get(key);
+      const radius = Math.max(4, size / 2 - 1);
+      const svg = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+          <circle cx="${size / 2}" cy="${size / 2}" r="${radius}" fill="${color}" stroke="#ffffff" stroke-width="1.5"/>
+        </svg>
+      `;
+      const icon = {
+        content: `<img src="data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}" width="${size}" height="${size}" alt="">`,
+        size: new naver.maps.Size(size, size),
+        anchor: new naver.maps.Point(size / 2, size / 2)
+      };
+      state.cachedIcons.set(key, icon);
+      return icon;
+    }
+
+    function getRecordColor(record) {
+      if (state.residualRecordIdSet.has(record.id)) return RESIDUAL_GRAY;
+      const zoneId = state.zoneByRecordId.get(record.id);
+      const zone = zoneId ? state.assignmentZoneMap.get(zoneId) : null;
+      if (zone) return zone.color;
+      return "#0ea5e9";
+    }
+
+    function markerSampleModulo() {
+      if (!state.map) return 1;
+      const zoom = state.map.getZoom();
+      if (zoom <= 10) return 18;
+      if (zoom <= 11) return 12;
+      if (zoom <= 12) return 8;
+      if (zoom <= 13) return 5;
+      if (zoom <= 14) return 3;
+      if (zoom <= 15) return 2;
+      return 1;
+    }
+
+    function markerSize() {
+      if (!state.map) return 12;
+      const zoom = state.map.getZoom();
+      if (zoom <= 11) return 7;
+      if (zoom <= 13) return 8;
+      if (zoom <= 15) return 10;
+      return 12;
+    }
+
+    function recordInBounds(record, bounds) {
+      if (!bounds) return true;
+      const point = new naver.maps.LatLng(record.lat, record.lon);
+      return bounds.hasLatLng(point);
+    }
+
+    function clearMarkers() {
+      for (const marker of state.markers) marker.setMap(null);
+      state.markers = [];
+    }
+
+    function renderMarkers(delay = 70) {
+      if (!state.map || !state.currentScope || state.assignmentRunning) return;
+      const token = ++state.markerToken;
+      if (state.markerRenderTimer) window.clearTimeout(state.markerRenderTimer);
+      state.markerRenderTimer = window.setTimeout(() => window.requestAnimationFrame(() => {
+        if (token !== state.markerToken) return;
+        clearMarkers();
+        if (!state.pointsVisible) return;
+        const records = state.currentScope.records || [];
+        const bounds = state.map.getBounds();
+        const modulo = markerSampleModulo();
+        const size = markerSize();
+        const selectedZone = state.selectedZoneId ? state.assignmentZoneMap.get(state.selectedZoneId) : null;
+        const selectedIds = selectedZone ? new Set(selectedZone.records.map((record) => record.id)) : null;
+        const markerItems = [];
+        records.forEach((record, index) => {
+          const force = state.selectedRecordId
+            ? record.id === state.selectedRecordId
+            : (state.residualRecordIdSet.has(record.id) || selectedIds?.has(record.id));
+          if (!force && index % modulo !== 0) return;
+          if (!force && !recordInBounds(record, bounds)) return;
+          markerItems.push({ record, force });
+        });
+
+        let cursor = 0;
+        const batchSize = 220;
+        const renderBatch = () => {
+          if (token !== state.markerToken) return;
+          const end = Math.min(cursor + batchSize, markerItems.length);
+          for (; cursor < end; cursor += 1) {
+            const { record, force } = markerItems[cursor];
+            const color = getRecordColor(record);
+            const marker = new naver.maps.Marker({
+              position: new naver.maps.LatLng(record.lat, record.lon),
+              map: state.map,
+              icon: markerIcon(color, force ? size + 4 : size),
+              zIndex: force ? 200 : 20
+            });
+            naver.maps.Event.addListener(marker, "click", () => selectRecord(record));
+            state.markers.push(marker);
+          }
+          if (cursor < markerItems.length) window.requestAnimationFrame(renderBatch);
+        };
+        renderBatch();
+      }), delay);
+    }
+
+    function clearSelectedOverlays() {
+      for (const overlay of state.selectedOverlays) overlay.setMap(null);
+      state.selectedOverlays = [];
+      if (state.searchMarker) {
+        state.searchMarker.setMap(null);
+        state.searchMarker = null;
+      }
+    }
+
+    function collectGeometryRings(value, rings = []) {
+      if (!Array.isArray(value) || !value.length) return rings;
+      if (
+        Array.isArray(value[0]) &&
+        value[0].length >= 2 &&
+        typeof value[0][0] === "number" &&
+        typeof value[0][1] === "number"
+      ) {
+        rings.push(value);
+        return rings;
+      }
+      for (const item of value) collectGeometryRings(item, rings);
+      return rings;
+    }
+
+    function drawZoneOverlays(zone) {
+      clearSelectedOverlays();
+    }
+
+    function drawRecordOverlay(record) {
+      clearSelectedOverlays();
+      const color = getRecordColor(record);
+      state.searchMarker = new naver.maps.Marker({
+        position: new naver.maps.LatLng(record.lat, record.lon),
+        map: state.map,
+        icon: markerIcon(color, 22),
+        zIndex: 400
+      });
+    }
+
+    function fitRecords(records) {
+      if (!state.map || !records?.length) return;
+      const bounds = new naver.maps.LatLngBounds();
+      for (const record of records) bounds.extend(new naver.maps.LatLng(record.lat, record.lon));
+      state.map.fitBounds(bounds, { top: 52, right: 52, bottom: 52, left: 52 });
+    }
+
+    function fitScope(scope) {
+      fitRecords(scope?.records || []);
+    }
+
+    function resetAssignment() {
+      state.currentAssignments = [];
+      state.zoneByRecordId = new Map();
+      state.assignmentZoneMap = new Map();
+      state.residualRecords = [];
+      state.residualRecordIdSet = new Set();
+      state.selectedRecordId = null;
+      state.selectedZoneId = null;
+      clearSelectedOverlays();
+      updateBandSummary(null);
+      renderAssignmentTable([]);
+      updateRemainingButton();
+      renderMarkers();
+      setStatus("배정 결과를 초기화했습니다.");
+    }
+
+    function updateRemainingButton() {
+      document.getElementById("remaining-btn").textContent = `잔여오더 ${formatNumber(getTotalOrders(state.residualRecords))}`;
+    }
+
+    function updateScope() {
+      const scope = getScope();
+      state.currentScope = scope;
+      state.currentRecordMap = new Map((scope?.records || []).map((record) => [record.id, record]));
+      resetAssignment();
+      updateStats(scope);
+      if (scope) {
+        fitScope(scope);
+        setStatus(`${scope.scope_key || getScopeKey()} 데이터 로드: ${formatNumber(scope.records?.length || 0)}주소 / ${formatNumber(scope.total_orders || getTotalOrders(scope.records || []))}건`);
+      }
+    }
+
+    function searchRecord() {
+      const scope = state.currentScope;
+      const keyword = normalizeText(document.getElementById("search-input").value).toLowerCase();
+      if (!scope || !keyword) {
+        setStatus("검색어를 입력하세요.", true);
+        return;
+      }
+      const record = (scope.records || []).find((item) => {
+        const text = [
+          item.id,
+          item.address,
+          item.road_address,
+          item.jibun_address,
+          item.dong,
+          item.road_stem,
+          item.block_id,
+          item.lot_main,
+          item.lot_sub
+        ].map((value) => normalizeText(value).toLowerCase()).join(" ");
+        return text.includes(keyword);
+      });
+      if (!record) {
+        setStatus(`검색 결과가 없습니다: ${keyword}`, true);
+        return;
+      }
+      selectRecord(record);
+      setStatus(`검색 결과: ${record.address || record.road_address || record.jibun_address}`);
+    }
+
+    function exportAssignments() {
+      const scope = state.currentScope;
+      if (!scope) {
+        setStatus("저장할 데이터가 없습니다.", true);
+        return;
+      }
+      const exportBaseName = `${scope.center || "center"}_${scope.month || "month"}_인원배정`;
+      const rows = [[
+        "구분", "인원", "오더", "센터", "월", "주소", "도로명주소", "지번주소",
+        "동", "도로명", "본번", "부번"
+      ]];
+      for (const zone of state.currentAssignments) {
+        zone.records.forEach((record) => rows.push(recordExportRow("자동배정", zone.id, record)));
+      }
+      state.residualRecords.forEach((record) => rows.push(recordExportRow("잔여오더", "", record)));
+      if (rows.length <= 1) {
+        setStatus("먼저 배정을 실행하세요.", true);
+        return;
+      }
+      fetch("./api/export_assignments_xlsx", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          filename: exportBaseName,
+          sheet_name: "Assignments",
+          rows
+        })
+      })
+        .then((response) => {
+          if (!response.ok) throw new Error(`저장 실패 (${response.status})`);
+          return response.blob();
+        })
+        .then((blob) => {
+          const url = URL.createObjectURL(blob);
+          const anchor = document.createElement("a");
+          anchor.href = url;
+          anchor.download = `${exportBaseName}.xlsx`;
+          document.body.appendChild(anchor);
+          anchor.click();
+          anchor.remove();
+          URL.revokeObjectURL(url);
+          setStatus("엑셀 저장을 완료했습니다.");
+        })
+        .catch((error) => setStatus(`엑셀 저장 실패: ${error.message}`, true));
+    }
+
+    function recordExportRow(kind, person, record) {
+      return [
+        kind,
+        person,
+        record.orders ?? "",
+        record.center ?? "",
+        record.month ?? "",
+        record.address ?? "",
+        record.road_address ?? "",
+        record.jibun_address ?? "",
+        record.dong ?? "",
+        record.road_stem ?? "",
+        record.lot_main ?? "",
+        record.lot_sub ?? ""
+      ];
+    }
+
+    function showPanel() {
+      document.getElementById("control-panel").classList.remove("hidden");
+    }
+
+    function showDetailPanel() {
+      document.getElementById("detail-panel").classList.remove("hidden");
+    }
+
+    function hideDetailPanel() {
+      document.getElementById("detail-panel").classList.add("hidden");
+    }
+
+    function clearSelection() {
+      state.selectedRecordId = null;
+      state.selectedZoneId = null;
+      clearSelectedOverlays();
+      renderAssignmentTable(state.currentAssignments);
+      hideDetailPanel();
+      renderMarkers();
+    }
+
+    function setupEvents() {
+      document.getElementById("center-select").addEventListener("change", updateScope);
+      document.getElementById("month-select").addEventListener("change", updateScope);
+      document.getElementById("people-input").addEventListener("input", updateTargetOutput);
+      document.getElementById("assign-btn").addEventListener("click", runAssignment);
+      document.getElementById("clear-btn").addEventListener("click", resetAssignment);
+      document.getElementById("remaining-btn").addEventListener("click", renderResidualDetail);
+      document.getElementById("export-btn").addEventListener("click", exportAssignments);
+      document.getElementById("search-btn").addEventListener("click", searchRecord);
+      document.getElementById("search-input").addEventListener("keydown", (event) => {
+        if (event.key === "Enter") searchRecord();
+      });
+      document.getElementById("fit-all-btn").addEventListener("click", () => fitScope(state.currentScope));
+      document.getElementById("reset-map-btn").addEventListener("click", () => fitScope(state.currentScope));
+      document.getElementById("toggle-points-btn").addEventListener("click", () => {
+        state.pointsVisible = !state.pointsVisible;
+        document.getElementById("toggle-points-btn").textContent = `점 표시 ${state.pointsVisible ? "ON" : "OFF"}`;
+        renderMarkers();
+      });
+      document.getElementById("toggle-cadastral-btn").addEventListener("click", () => {
+        state.cadastralVisible = !state.cadastralVisible;
+        document.getElementById("toggle-cadastral-btn").textContent = `지적도 ${state.cadastralVisible ? "ON" : "OFF"}`;
+        if (state.cadastralLayer) state.cadastralLayer.setMap(state.cadastralVisible ? state.map : null);
+      });
+      document.getElementById("toggle-panel-btn").addEventListener("click", () => {
+        document.getElementById("control-panel").classList.add("hidden");
+      });
+      document.getElementById("toggle-detail-btn").addEventListener("click", () => {
+        document.getElementById("detail-panel").classList.add("hidden");
+      });
+      document.getElementById("open-panel-btn").addEventListener("click", showPanel);
+      document.getElementById("open-detail-btn").addEventListener("click", showDetailPanel);
+      document.getElementById("zoom-in-btn").addEventListener("click", () => state.map?.setZoom(state.map.getZoom() + 1, false));
+      document.getElementById("zoom-out-btn").addEventListener("click", () => state.map?.setZoom(state.map.getZoom() - 1, false));
+      window.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") clearSelection();
+      });
+      window.addEventListener("resize", () => {
+        if (!state.map) return;
+        state.map.setSize(new naver.maps.Size(window.innerWidth, window.innerHeight));
+      });
+    }
+
+    async function init() {
+      try {
+        showLoading("지도 SDK와 processed_assignment_blocks.json을 로드하는 중입니다.");
+        const [maps, appData] = await Promise.all([waitForNaverMaps(), loadAppData()]);
+        state.appData = appData;
+        state.map = new maps.Map("map", {
+          center: new maps.LatLng(36.3504119, 127.3845475),
+          zoom: 13,
+          minZoom: 8,
+          mapTypeControl: true,
+          scaleControl: true
+        });
+        if (maps.CadastralLayer) {
+          state.cadastralLayer = new maps.CadastralLayer();
+          state.cadastralLayer.setMap(state.map);
+        }
+        maps.Event.addListener(state.map, "idle", renderMarkers);
+        maps.Event.addListener(state.map, "click", () => {
+          clearSelection();
+        });
+        populateFilters();
+        setupEvents();
+        updateScope();
+        hideLoading();
+      } catch (error) {
+        console.error(error);
+        hideLoading();
+        setStatus(`초기화 실패: ${error.message}`, true);
+      }
+    }
+
+    window.navermap_authFailure = function () {
+      setStatus("네이버 지도 인증에 실패했습니다. API 키 설정을 확인하세요.", true);
+    };
+
+    init();
+  </script>
+</body>
+</html>
