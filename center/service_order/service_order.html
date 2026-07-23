@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="서비스오더 오생성 현황 대시보드">
+  <title>서비스오더 | enernet</title>
+  <link rel="stylesheet" href="../assets/service_order.css?v=20260723-2">
+  <script src="../assets/service_order.js?v=20260723-3" defer></script>
+</head>
+<body class="service-order-page">
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="주요 메뉴">
+      <a class="brand" href="../" aria-label="Home">
+        <img class="brand-logo" src="../assets/enernet_logo.png" alt="enernet">
+      </a>
+
+      <nav class="workspace-nav" aria-label="업무 메뉴">
+        <p class="nav-heading">업무 메뉴</p>
+        <a class="nav-item" href="../">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5v8.25A1.25 1.25 0 0 1 18.75 20h-13.5A1.25 1.25 0 0 1 4 18.75Z"/><path d="M9 20v-6h6v6"/></svg>
+          <span>Home</span>
+        </a>
+        <a class="nav-item is-active" href="./" aria-current="page">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 4h14v16H5z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+          <span>서비스오더</span>
+        </a>
+        <span class="nav-item is-disabled" aria-disabled="true">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 5h16v12H8l-4 3Z"/><path d="M8 9h8M8 13h5"/></svg>
+          <span>VOC</span><small>준비 중</small>
+        </span>
+        <span class="nav-item is-disabled" aria-disabled="true">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v8M8 12h8"/></svg>
+          <span>CCM</span><small>준비 중</small>
+        </span>
+        <span class="nav-item is-disabled" aria-disabled="true">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3v3M6 5l2 2M18 5l-2 2M4 11h3M17 11h3"/><path d="M8 20h8l1-8a5 5 0 0 0-10 0Z"/></svg>
+          <span>계량기</span><small>준비 중</small>
+        </span>
+      </nav>
+
+      <div class="server-box" id="server-box" aria-live="polite">
+        <span class="server-dot" aria-hidden="true"></span>
+        <span>
+          <strong id="server-state">서버 확인 중</strong>
+          <small id="server-address">desktop-004:8000</small>
+        </span>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="page-header">
+        <div>
+          <nav class="breadcrumb" aria-label="현재 위치">
+            <a href="../">Home</a><span aria-hidden="true">/</span><span>서비스오더</span>
+          </nav>
+          <h1>서비스오더</h1>
+        </div>
+        <div class="header-actions">
+          <span class="updated-time" id="updated-time" aria-live="polite">자료 확인 중</span>
+        </div>
+      </header>
+
+      <nav class="function-tabs" aria-label="서비스오더 기능">
+        <button class="function-tab is-active" type="button" aria-current="page">오생성</button>
+        <button class="function-tab" type="button" disabled>준비 중</button>
+        <button class="function-tab" type="button" disabled>준비 중</button>
+        <a class="admin-link tab-admin-link" href="./admin/">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3"/><path d="M6.5 20v-2.5a5.5 5.5 0 0 1 11 0V20"/><path d="m18.5 5 .8.8 1.2-.2.3 1.2-1 .7.2 1.2-1.1.5-.5 1.1-1.2-.3-.8.9-1-.8-1.1.3-.5-1.1.9-.8-.3-1.2 1.1-.5.5-1.1 1.2.3Z"/></svg>
+          관리자
+        </a>
+      </nav>
+
+      <section class="status-briefing" id="status-briefing" aria-label="현황 브리핑">
+        <span class="briefing-kicker">현황 브리핑</span>
+        <div class="briefing-viewport" aria-live="polite" aria-atomic="true">
+          <p id="briefing-message">선택한 조건의 현황을 정리하고 있습니다.</p>
+        </div>
+        <div class="briefing-controls">
+          <span id="briefing-position">1 / 3</span>
+          <button id="briefing-prev" type="button" aria-label="이전 현황">‹</button>
+          <button id="briefing-next" type="button" aria-label="다음 현황">›</button>
+        </div>
+      </section>
+
+      <div class="filter-sticky-anchor" id="filter-sticky-anchor" aria-hidden="true"></div>
+
+      <section class="filter-panel" aria-labelledby="filter-title">
+        <div class="filter-panel-head">
+          <div>
+            <h2 id="filter-title">조회 기준</h2>
+            <p id="active-filter-summary" aria-live="polite">전체 사업부 · 연간 월별</p>
+          </div>
+          <button class="reset-button" id="reset-filters" type="button">초기화</button>
+        </div>
+
+        <div class="filter-grid">
+          <fieldset class="filter-field scope-field">
+            <legend>분석 기준</legend>
+            <div class="segmented" id="scope-control">
+              <button type="button" data-scope="person" aria-pressed="false">인원</button>
+              <button type="button" class="is-selected" data-scope="division" aria-pressed="true">사업부</button>
+            </div>
+          </fieldset>
+
+          <div class="filter-field person-filter" id="person-filter" hidden>
+            <label for="person-search">인원 검색</label>
+            <div class="search-control">
+              <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6"/><path d="m15 15 5 5"/></svg>
+              <input id="person-search" type="search" autocomplete="off" placeholder="이름을 입력하세요" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" aria-controls="person-options" aria-activedescendant="">
+              <button class="clear-search" id="clear-person" type="button" aria-label="선택한 인원 지우기" hidden>×</button>
+              <div class="search-results" id="person-options" role="listbox" hidden></div>
+            </div>
+          </div>
+
+          <div class="filter-field division-filter" id="division-filter">
+            <label for="division-select">사업부</label>
+            <select id="division-select">
+              <option value="">전체 사업부</option>
+            </select>
+          </div>
+
+          <fieldset class="filter-field period-field">
+            <legend>기간</legend>
+            <div class="segmented compact" id="period-control">
+              <button type="button" class="is-selected" data-period="month" aria-pressed="true">월</button>
+              <button type="button" data-period="range" aria-pressed="false">기간</button>
+            </div>
+          </fieldset>
+
+          <div class="period-inputs month-inputs" id="month-inputs">
+            <div class="filter-field">
+              <label for="year-select">연도</label>
+              <select id="year-select"></select>
+            </div>
+            <div class="filter-field">
+              <label for="month-select">월 선택</label>
+              <select id="month-select">
+                <option value="">전체 월</option>
+                <option value="1">1월</option>
+                <option value="2">2월</option>
+                <option value="3">3월</option>
+                <option value="4">4월</option>
+                <option value="5">5월</option>
+                <option value="6">6월</option>
+                <option value="7">7월</option>
+                <option value="8">8월</option>
+                <option value="9">9월</option>
+                <option value="10">10월</option>
+                <option value="11">11월</option>
+                <option value="12">12월</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="period-inputs range-inputs" id="range-inputs" hidden>
+            <div class="filter-field">
+              <label for="start-date">시작일</label>
+              <input id="start-date" type="date">
+            </div>
+            <span aria-hidden="true">–</span>
+            <div class="filter-field">
+              <label for="end-date">종료일</label>
+              <input id="end-date" type="date">
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="new-error-monitor" id="new-error-monitor" aria-labelledby="new-error-title">
+        <div class="new-error-copy">
+          <span class="new-error-kicker">실시간 현황</span>
+          <h2 id="new-error-title">새로운 오생성 모니터링</h2>
+          <p id="new-error-message">선택한 조회 조건에서 새로 승인된 오생성을 확인합니다.</p>
+        </div>
+        <div class="new-error-actions">
+          <button class="new-error-count" id="new-error-count" type="button" disabled aria-expanded="false" aria-controls="new-error-list-panel">
+            <strong>0건</strong>
+            <span>목록 보기</span>
+          </button>
+          <a class="new-error-download" id="new-error-download" href="#" aria-disabled="true" title="새 오생성 Excel 저장">
+            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 4v11M8 11l4 4 4-4"/><path d="M5 19h14"/></svg>
+            <span>Excel 저장</span>
+          </a>
+        </div>
+      </section>
+
+      <section class="new-error-list-panel" id="new-error-list-panel" aria-labelledby="new-error-list-title" hidden>
+        <div class="new-error-list-head">
+          <div>
+            <h2 id="new-error-list-title">새로운 오생성 목록</h2>
+            <p id="new-error-list-summary" aria-live="polite">선택한 조회 조건의 데이터를 불러옵니다.</p>
+          </div>
+          <button class="new-error-list-close" id="new-error-list-close" type="button" aria-label="새로운 오생성 목록 닫기">×</button>
+        </div>
+        <div class="new-error-list-toolbar">
+          <label class="new-error-list-search" for="new-error-list-search">
+            <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6"/><path d="m15 15 5 5"/></svg>
+            <input id="new-error-list-search" type="search" autocomplete="off" placeholder="목록 전체 검색">
+          </label>
+          <button class="new-error-filter-reset" id="new-error-filter-reset" type="button" hidden>열 필터 초기화</button>
+        </div>
+        <div class="new-error-table-shell" id="new-error-table-shell">
+          <table class="new-error-table" aria-describedby="new-error-list-summary">
+            <thead><tr id="new-error-table-head"></tr></thead>
+            <tbody id="new-error-table-body"></tbody>
+          </table>
+          <div class="new-error-table-state" id="new-error-table-state" role="status" hidden></div>
+        </div>
+        <div class="new-error-pagination" aria-label="새로운 오생성 목록 페이지 이동">
+          <span id="new-error-page-range">0건</span>
+          <div>
+            <button type="button" id="new-error-first-page" aria-label="첫 페이지">«</button>
+            <button type="button" id="new-error-prev-page" aria-label="이전 페이지">‹</button>
+            <strong id="new-error-page-label">1 / 1</strong>
+            <button type="button" id="new-error-next-page" aria-label="다음 페이지">›</button>
+            <button type="button" id="new-error-last-page" aria-label="마지막 페이지">»</button>
+          </div>
+        </div>
+      </section>
+
+      <div class="new-error-filter-menu" id="new-error-filter-menu" role="dialog" aria-modal="false" aria-labelledby="new-error-filter-label" hidden>
+        <div class="new-error-filter-title">
+          <span id="new-error-filter-label">열 필터</span>
+          <button id="new-error-filter-close" type="button" aria-label="필터 메뉴 닫기">×</button>
+        </div>
+        <input id="new-error-filter-input" type="search" autocomplete="off" placeholder="값 검색">
+        <small id="new-error-filter-hint">전체 데이터의 고유 값을 불러옵니다.</small>
+        <div class="new-error-filter-selection">
+          <label><input id="new-error-filter-select-all" type="checkbox"><span>(현재 목록 전체 선택)</span></label>
+          <strong id="new-error-filter-selected-count">0개 선택</strong>
+        </div>
+        <div class="new-error-filter-values" id="new-error-filter-values" role="listbox" aria-label="전체 데이터의 고유값"></div>
+        <div class="new-error-filter-actions">
+          <button type="button" id="new-error-filter-clear">전체 보기</button>
+          <button type="button" id="new-error-filter-apply">적용</button>
+        </div>
+      </div>
+
+      <section class="summary-grid" aria-label="선택 조건 요약">
+        <article class="subject-summary" tabindex="0">
+          <span class="metric-label">조회 대상</span>
+          <strong id="subject-name">전체 사업부</strong>
+          <span id="subject-division">5개 사업부 비교</span>
+        </article>
+        <article class="metric-card" tabindex="0">
+          <span class="metric-label">전체 데이터 건수</span>
+          <strong id="metric-total">–</strong>
+        </article>
+        <article class="metric-card" tabindex="0">
+          <span class="metric-label">오생성 건수</span>
+          <strong id="metric-errors">–</strong>
+          <small id="metric-errors-note">오생성률 –</small>
+        </article>
+        <article class="metric-card is-accent rate-highlight" tabindex="0">
+          <span class="metric-label">오생성률</span>
+          <strong id="metric-rate">–</strong>
+          <small id="metric-rate-note">오생성 –</small>
+        </article>
+      </section>
+
+      <section class="chart-panel" aria-labelledby="trend-description">
+        <div class="panel-head">
+          <div>
+            <h2>오생성 추이</h2>
+            <p id="trend-description">연간 월별 추이</p>
+          </div>
+          <div class="chart-head-tools">
+            <div class="view-tabs" id="trend-view-tabs" role="tablist" aria-label="오생성 추이 표현 방식">
+              <button class="is-selected" type="button" role="tab" data-trend-view="line" aria-selected="true">시계열</button>
+              <button type="button" role="tab" data-trend-view="stacked" aria-selected="false">누적 막대</button>
+            </div>
+            <div class="chart-legend" id="chart-legend" aria-label="그래프 범례"></div>
+          </div>
+        </div>
+        <div class="chart-wrap" id="trend-chart-wrap">
+          <svg id="trend-chart" class="trend-chart" viewBox="0 0 1040 340" role="img" aria-label="오생성 추이 그래프"></svg>
+          <div class="empty-state" id="chart-empty">
+            <svg aria-hidden="true" viewBox="0 0 48 48"><path d="M7 38V10M7 38h34"/><path d="m12 31 8-9 7 5 12-15"/></svg>
+            <strong>표시할 현황이 없습니다.</strong>
+            <span>관리자 페이지에서 데이터를 반영하거나 조회 조건을 바꿔보세요.</span>
+          </div>
+          <div class="chart-tooltip" id="chart-tooltip" role="tooltip" hidden></div>
+        </div>
+      </section>
+
+      <section class="analysis-grid" aria-label="오생성 분석과 사업부 현황">
+      <section class="insight-panel" aria-labelledby="insight-title">
+        <div class="insight-head">
+          <div>
+            <h2 id="insight-title">오생성 변화 분석</h2>
+            <p id="insight-caption">선택 월과 전월을 비교합니다.</p>
+          </div>
+          <div class="view-tabs insight-view-tabs" id="insight-view-tabs" role="tablist" aria-label="변화 분석 화면 전환">
+            <button class="is-selected" type="button" role="tab" data-insight-view="change" aria-selected="true">전월 대비 오생성 증감</button>
+            <button type="button" role="tab" data-insight-view="pattern" aria-selected="false">반복 키워드</button>
+          </div>
+        </div>
+
+        <div class="insight-view is-active" id="change-view" role="tabpanel">
+          <div class="cause-toolbar">
+            <div class="cause-switch" id="cause-switch" role="group" aria-label="증감 원인 기준">
+              <button class="is-selected" type="button" data-cause="business" aria-pressed="true">사업부</button>
+              <button type="button" data-cause="subcategory" aria-pressed="false">소분류</button>
+              <button type="button" data-cause="person" aria-pressed="false">인원</button>
+            </div>
+          </div>
+          <div class="comparison-chart-wrap" id="comparison-chart-wrap">
+            <svg id="comparison-chart" class="comparison-chart" viewBox="0 0 760 420" role="img" aria-label="전월 대비 오생성 증감 원인 세로 막대그래프"></svg>
+            <div class="empty-state comparison-empty" id="comparison-empty" hidden>
+              <strong>비교할 전월 자료가 없습니다.</strong>
+              <span>월을 선택하면 전월과의 증감 원인을 확인할 수 있습니다.</span>
+            </div>
+            <div class="chart-tooltip" id="comparison-tooltip" role="tooltip" hidden></div>
+          </div>
+        </div>
+
+        <div class="insight-view" id="pattern-view" role="tabpanel" hidden>
+          <div class="pattern-overview">
+            <div class="pattern-composition">
+              <div class="pattern-composition-head">
+                <span>오생성 구성</span>
+                <strong id="pattern-total">0건</strong>
+              </div>
+              <div class="pattern-stacked-bar" aria-label="반복 및 신규 패턴 비율">
+                <span class="is-repeat" id="pattern-repeat-bar"></span>
+                <span class="is-new" id="pattern-new-bar"></span>
+              </div>
+              <div class="pattern-legend">
+                <span><i class="is-repeat"></i>반복 <strong id="pattern-repeat-value">0건</strong></span>
+                <span><i class="is-new"></i>신규 <strong id="pattern-new-value">0건</strong></span>
+              </div>
+            </div>
+            <div class="pattern-list-wrap">
+              <div class="pattern-list-head">
+                <strong>반복 발생 패턴</strong>
+                <span>월별 발생 건수(2건 이상)</span>
+              </div>
+              <ol class="pattern-list" id="pattern-list"></ol>
+              <div class="pattern-empty" id="pattern-empty" hidden>선택한 기간에 반복 탐지된 패턴이 없습니다.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="business-overview-panel" aria-labelledby="business-overview-title">
+        <div class="business-overview-head">
+          <div>
+            <h2 id="business-overview-title">사업부 현황</h2>
+            <p id="business-overview-caption">선택 기간 사업부별 오생성을 비교합니다.</p>
+          </div>
+          <span id="business-overview-period"></span>
+        </div>
+        <div class="business-overview-columns" aria-hidden="true">
+          <span>사업부</span><span>오생성</span><span>오생성률</span><span>전월 대비</span>
+        </div>
+        <div class="business-overview-list" id="business-overview-list"></div>
+        <div class="business-overview-empty" id="business-overview-empty" hidden>표시할 사업부 현황이 없습니다.</div>
+      </section>
+      </section>
+
+      <section class="ranking-grid" aria-label="오생성 순위">
+        <article class="ranking-panel" data-ranking="subcategory">
+          <div class="panel-head ranking-head">
+            <div>
+              <h2>소분류 순위</h2>
+              <p id="subcategory-caption">오생성 건수 기준</p>
+            </div>
+            <div class="ranking-switch" role="group" aria-label="소분류 순위 기준">
+              <button type="button" class="is-selected" data-metric="count" aria-pressed="true">건수</button>
+              <button type="button" data-metric="rate" aria-pressed="false">오생성률</button>
+            </div>
+          </div>
+          <ol class="ranking-list" id="subcategory-ranking"></ol>
+          <div class="ranking-empty" id="subcategory-empty">표시할 소분류 자료가 없습니다.</div>
+        </article>
+
+        <article class="ranking-panel" data-ranking="person">
+          <div class="panel-head ranking-head">
+            <div>
+              <h2>인원 순위</h2>
+              <p id="person-caption">오생성 건수 기준</p>
+            </div>
+            <div class="ranking-switch" role="group" aria-label="인원 순위 기준">
+              <button type="button" class="is-selected" data-metric="count" aria-pressed="true">건수</button>
+              <button type="button" data-metric="rate" aria-pressed="false">오생성률</button>
+            </div>
+          </div>
+          <ol class="ranking-list" id="person-ranking"></ol>
+          <div class="ranking-empty" id="person-empty">표시할 인원 자료가 없습니다.</div>
+        </article>
+      </section>
+
+      <footer class="page-footer">
+        <span>서비스품질팀 서비스오더</span>
+        <span id="footer-period">조회 조건을 선택하세요.</span>
+      </footer>
+    </main>
+  </div>
+
+  <div class="toast" id="page-toast" role="alert" aria-live="assertive" aria-atomic="true" hidden>
+    <span class="toast-icon" aria-hidden="true">✓</span>
+    <div>
+      <strong id="toast-title">서비스오더에 접속했습니다.</strong>
+      <p id="toast-message">최신 반영 현황을 확인하고 있습니다.</p>
+    </div>
+    <button type="button" id="close-toast" aria-label="알림 닫기">×</button>
+  </div>
+
+  <noscript>이 페이지의 동적 현황을 보려면 JavaScript를 사용해야 합니다.</noscript>
+</body>
+</html>

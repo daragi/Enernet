@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="서비스오더 오생성 분석 관리자">
+  <title>오생성 관리자 | enernet</title>
+  <link rel="stylesheet" href="../../assets/service_order.css?v=20260723-2">
+  <link rel="stylesheet" href="../../assets/service_order_error_admin.css?v=20260723-1">
+  <script src="../../assets/dashboard.js?v=20260721-13" defer></script>
+  <script src="../../assets/service_order_error_admin.js?v=20260723-4" defer></script>
+</head>
+<body class="admin-page">
+  <div class="admin-update-alert" id="admin-update-alert" role="alert" aria-live="assertive" hidden>
+    <span class="admin-update-alert-icon" aria-hidden="true">!</span>
+    <div>
+      <strong>데이터 업데이트가 필요합니다.</strong>
+      <p id="admin-update-message">마지막 데이터 업데이트 날짜를 확인하고 있습니다.</p>
+    </div>
+    <button id="admin-update-close" type="button" aria-label="데이터 업데이트 알림 닫기">×</button>
+  </div>
+
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="주요 메뉴">
+      <a class="brand" href="../../" aria-label="enernet Home">
+        <img class="brand-logo" src="/assets/enernet_logo.png" alt="enernet">
+      </a>
+
+      <nav class="workspace-nav" aria-label="업무 메뉴">
+        <p class="nav-heading">업무 메뉴</p>
+        <a class="nav-item" href="../../">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5v8.25A1.25 1.25 0 0 1 18.75 20h-13.5A1.25 1.25 0 0 1 4 18.75Z"/><path d="M9 20v-6h6v6"/></svg>
+          <span>Home</span>
+        </a>
+        <a class="nav-item is-active" href="../" aria-current="page">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 4h14v16H5z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+          <span>서비스오더</span>
+        </a>
+        <span class="nav-item is-disabled" aria-disabled="true">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 5h16v12H8l-4 3Z"/><path d="M8 9h8M8 13h5"/></svg>
+          <span>VOC</span><small>준비 중</small>
+        </span>
+        <span class="nav-item is-disabled" aria-disabled="true">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v8M8 12h8"/></svg>
+          <span>CCM</span><small>준비 중</small>
+        </span>
+        <span class="nav-item is-disabled" aria-disabled="true">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3v3M6 5l2 2M18 5l-2 2M4 11h3M17 11h3"/><path d="M8 20h8l1-8a5 5 0 0 0-10 0Z"/></svg>
+          <span>계량기</span><small>준비 중</small>
+        </span>
+      </nav>
+
+      <div class="server-box is-checking" id="server-box" data-server-status aria-live="polite">
+        <span class="server-dot" aria-hidden="true"></span>
+        <span>
+          <strong id="server-state" data-server-status-text>서버 확인 중</strong>
+          <small id="server-address" data-server-address>desktop-004:8000</small>
+        </span>
+      </div>
+    </aside>
+
+    <main class="main-content admin-main">
+      <header class="admin-topbar">
+        <div>
+          <nav class="breadcrumb" aria-label="현재 위치">
+            <a href="../">서비스오더</a><span aria-hidden="true">/</span><span>오생성 관리자</span>
+          </nav>
+          <h1>오생성 관리자</h1>
+        </div>
+        <a class="admin-back-link" href="../">
+          <span>현황으로 돌아가기</span>
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h14M14 7l5 5-5 5"/></svg>
+        </a>
+      </header>
+
+      <section class="admin-upload-layout" aria-labelledby="upload-title">
+        <div class="admin-upload-card">
+          <div class="admin-card-heading">
+            <div>
+              <span class="admin-section-label"></span>
+              <h2 id="upload-title">파일 업로드</h2>
+            </div>
+            <span class="admin-ready-badge"><i aria-hidden="true"></i> 준비</span>
+          </div>
+
+          <form id="analysis-form" novalidate>
+            <label class="upload-zone" for="order-file" id="upload-zone">
+              <input id="order-file" name="file" type="file" accept=".xlsx" hidden>
+              <span class="upload-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5"/><path d="M5 13v5.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V13"/></svg>
+              </span>
+              <strong>Excel 파일을 선택하거나 놓으세요.</strong>
+              <span>.xlsx · 최대 150MB</span>
+              <small id="selected-file">선택된 파일 없음</small>
+            </label>
+            <button class="button-primary" id="analyze-button" type="submit" disabled>분석</button>
+          </form>
+        </div>
+
+        <aside class="admin-rule-card">
+          <span class="admin-section-label">기준</span>
+          <h2>기준</h2>
+          <ul>
+            <li><b>표시 집계</b> 사업부 · 오더취소 제외 건</li>
+            <li><b>후보 판정</b> 다빈도 키워드 + 업로드마다 키워드 축적 </li>
+            <li><b>처리 결과</b> 집계 및 데이터는 오생성 건에 대해서만 유지</li>
+          </ul>
+        </aside>
+      </section>
+
+      <section class="admin-new-error" id="admin-new-error" aria-labelledby="new-error-admin-title" hidden>
+        <div class="new-error-admin-heading">
+          <div>
+            <span class="admin-section-label">승인 현황</span>
+            <h2 id="new-error-admin-title">새로운 오생성</h2>
+            <p id="new-error-admin-summary">새로 승인된 오생성 데이터를 확인하고 있습니다.</p>
+          </div>
+          <div class="new-error-admin-actions">
+            <button class="new-error-count-button" id="new-error-count-toggle" type="button" aria-expanded="false" aria-controls="new-error-list-panel">
+              <strong id="new-error-admin-count">0</strong><span>건</span>
+              <small>목록 보기</small>
+            </button>
+            <a class="new-error-excel-button is-disabled" id="new-error-admin-download" href="#" aria-disabled="true">
+              Excel 저장
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 4v11M8 11l4 4 4-4"/><path d="M5 19h14"/></svg>
+            </a>
+          </div>
+        </div>
+
+        <div class="new-error-list-panel" id="new-error-list-panel" hidden>
+          <div class="new-error-list-toolbar">
+            <div>
+              <strong>승인된 오생성 목록</strong>
+              <span>열 이름 옆 필터 버튼으로 Excel처럼 값을 선택할 수 있습니다.</span>
+            </div>
+            <div>
+              <button class="grid-tool-button" id="new-error-clear-filters" type="button" disabled>필터 초기화</button>
+              <button class="grid-tool-button" id="new-error-refresh" type="button">새로고침</button>
+            </div>
+          </div>
+          <div class="new-error-sheet">
+            <div class="sheet-loading" id="new-error-loading" hidden>새로운 오생성을 불러오는 중입니다.</div>
+            <div class="sheet-scroll new-error-scroll" id="new-error-scroll">
+              <table class="candidate-table new-error-table" id="new-error-table" aria-label="새로운 오생성 데이터">
+                <thead id="new-error-head"></thead>
+                <tbody id="new-error-body"></tbody>
+              </table>
+            </div>
+            <div class="sheet-empty" id="new-error-empty" hidden>선택한 조건에 새로운 오생성이 없습니다.</div>
+            <div class="sheet-footer">
+              <span id="new-error-page-range">0건</span>
+              <div class="pagination" aria-label="새로운 오생성 페이지 이동">
+                <button id="new-error-page-prev" type="button" aria-label="이전 페이지">‹</button>
+                <span id="new-error-page-label">1 / 1</span>
+                <button id="new-error-page-next" type="button" aria-label="다음 페이지">›</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="process-panel" id="process-panel" hidden aria-live="polite">
+        <span class="process-spinner" aria-hidden="true"></span>
+        <div class="process-copy">
+          <strong id="process-title">데이터를 분석하고 있습니다.</strong>
+          <p id="process-message">업로드를 준비하고 있습니다.</p>
+          <div class="process-progress-track" role="progressbar" aria-label="분석 진행률" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <span id="process-progress-bar"></span>
+          </div>
+        </div>
+        <strong class="process-percent" id="process-percent">0%</strong>
+      </section>
+
+      <section class="admin-result" id="result-panel" hidden aria-live="polite">
+        <div class="admin-result-heading">
+          <div><span class="admin-section-label">분석 결과</span><p id="result-period"></p></div>
+          <span class="result-check" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="m6.5 12.5 3.5 3.5 7.5-8"/></svg>
+          </span>
+        </div>
+        <div class="metric-grid">
+          <div class="metric-card" title="생성부서가 사업부이고 오더취소 상태가 아닌 전체 데이터 행 수"><span>전체 데이터</span><strong id="metric-preprocessed">-</strong></div>
+          <div class="metric-card is-error" title="현재 집계에 반영된 오생성 행 수"><span>오생성</span><strong id="metric-auto-error">-</strong></div>
+          <div class="metric-card is-accent" title="관리자 확인이 필요한 미승인 후보 행 수"><span>후보군</span><strong id="metric-candidate">-</strong></div>
+        </div>
+        <div class="download-grid">
+          <a class="download-card" id="download-preprocessed" href="#"><span>전처리 결과</span><strong id="preprocessed-name">-</strong><b>Excel <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 4v11M8 11l4 4 4-4"/><path d="M5 19h14"/></svg></b></a>
+          <a class="download-card" id="download-candidate" href="#"><span>분류 결과</span><strong id="candidate-name">-</strong><b>Excel <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 4v11M8 11l4 4 4-4"/><path d="M5 19h14"/></svg></b></a>
+        </div>
+      </section>
+
+      <section class="candidate-workspace" id="candidate-workspace" hidden aria-labelledby="candidate-grid-title">
+        <div class="grid-toolbar">
+          <div class="review-mode-block">
+            <h2 class="visually-hidden" id="candidate-grid-title">오생성 검토</h2>
+            <div class="dataset-tabs review-mode-switch" role="tablist" aria-label="오생성 검토 구분">
+              <button class="dataset-tab is-active" id="candidate-dataset-tab" type="button" role="tab" aria-selected="true" aria-controls="candidate-sheet" tabindex="0" data-dataset="candidate"><i aria-hidden="true"></i><span>후보군</span><b id="candidate-tab-count">-</b></button>
+              <button class="dataset-tab" id="auto-error-dataset-tab" type="button" role="tab" aria-selected="false" aria-controls="candidate-sheet" tabindex="-1" data-dataset="auto_error"><i aria-hidden="true"></i><span>오생성</span><b id="error-tab-count">-</b></button>
+            </div>
+            <p id="candidate-grid-description">승인할 항목을 선택하세요.</p>
+          </div>
+          <div class="grid-toolbar-actions">
+            <span class="selection-summary" id="selection-summary"><b id="checked-count">0</b>건 <span id="selection-mode">선택</span> / <span id="candidate-total">0</span>건</span>
+            <button class="grid-tool-button is-approve" id="approve-selection" data-candidate-only type="button" disabled>선택 승인</button>
+            <button class="grid-tool-button" id="rollback-last" data-candidate-only type="button" title="현재 파일과 관계없이 시스템에 반영된 가장 최근 승인 묶음을 되돌립니다." disabled>최근 승인 묶음 롤백</button>
+            <button class="grid-tool-button" id="exclude-errors" data-auto-only type="button" disabled>후보로 이동</button>
+            <button class="grid-tool-button" id="restore-errors" type="button" hidden disabled>선택 복구</button>
+            <button class="grid-tool-button" id="grid-clear-filters" type="button" disabled>필터 초기화</button>
+            <button class="grid-tool-button" id="grid-refresh" type="button" title="현재 데이터 새로고침">새로고침</button>
+            <button class="grid-tool-button" id="grid-fullscreen" type="button" title="현재 데이터를 전체 화면으로 보기">전체 화면</button>
+          </div>
+        </div>
+
+        <div class="candidate-sheet" id="candidate-sheet" role="tabpanel" aria-labelledby="candidate-dataset-tab">
+          <div class="sheet-loading" id="sheet-loading" hidden>데이터를 불러오는 중입니다.</div>
+          <div class="sheet-scroll" id="sheet-scroll">
+            <table class="candidate-table" id="candidate-table" aria-label="오생성 후보 데이터">
+              <thead id="candidate-head"></thead>
+              <tbody id="candidate-body"></tbody>
+            </table>
+          </div>
+          <div class="sheet-empty" id="sheet-empty" hidden>표시할 데이터가 없습니다.</div>
+          <div class="sheet-footer">
+            <span id="page-range">0건</span>
+            <div class="pagination" aria-label="후보 데이터 페이지 이동">
+              <button id="page-prev" type="button" aria-label="이전 페이지">‹</button>
+              <span id="page-label">1 / 1</span>
+              <button id="page-next" type="button" aria-label="다음 페이지">›</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="error-panel" id="error-panel" hidden aria-live="assertive">
+        <strong>처리를 완료하지 못했습니다.</strong><p id="error-message"></p>
+      </section>
+    </main>
+  </div>
+
+  <div class="admin-toast" id="admin-toast" role="status" aria-live="polite" hidden>
+    <span id="admin-toast-message"></span>
+    <button id="admin-toast-close" type="button" aria-label="알림 닫기">×</button>
+  </div>
+</body>
+</html>
