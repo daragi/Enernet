@@ -6,7 +6,7 @@
 
 ## Projects
 
-- [assign_map](./assign_map): 안전점검 인원 배정 지도 자동화
-- [center](./center): 데이터 기반 업무 자동화
-  - 서비스오더
-    - 오생성: 키워드 기반 오생성 내역 자동 필터링 및 대시보드 구축
+- [assign_map](./assign_map) : 안전점검 인원 배정 지도 자동화
+- [center](./center) : 데이터 기반 업무 자동화
+  - service_order : 서비스오더
+    - error : 오생성: 키워드 기반 오생성 내역 자동 필터링 및 대시보드
