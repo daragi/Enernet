@@ -740,6 +740,7 @@
 
   async function loadOverview({ silent = false, suppressNewErrorToast = false } = {}) {
     updateFilterSummary();
+    syncBriefingVisibility();
     if (state.newErrorList.open) {
       state.newErrorList.downloadUrl = "";
       syncNewErrorDownload();
@@ -1156,7 +1157,29 @@
     }, 4500);
   }
 
+  function isBriefingAvailable() {
+    return state.scope === "business"
+      && !state.business
+      && (state.timeMode === "year" || (state.timeMode === "month" && Boolean(state.month)));
+  }
+
+  function syncBriefingVisibility() {
+    if (!elements.statusBriefing) return false;
+    const available = isBriefingAvailable();
+    elements.statusBriefing.hidden = !available;
+    elements.statusBriefing.setAttribute("aria-hidden", String(!available));
+    if (!available) {
+      stopBriefingRotation();
+      state.briefingMessages = [];
+      state.briefingIndex = 0;
+      if (elements.briefingMessage) elements.briefingMessage.textContent = "";
+      if (elements.briefingPosition) elements.briefingPosition.textContent = "";
+    }
+    return available;
+  }
+
   function renderBriefing() {
+    if (!syncBriefingVisibility()) return;
     const summary = state.overview.summary;
     const comparison = state.overview.comparison;
     const messages = [];
