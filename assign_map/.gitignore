@@ -1,0 +1,20 @@
+# Local secrets and deployment-only files
+api_keys.json
+.env
+.env.*
+admin/*
+!admin/admin.html
+!admin/README.md
+uploaded_workbooks/
+block_geocodes/
+
+# Generated/runtime files
+__pycache__/
+*.py[cod]
+*.log
+*.spec
+*.exe
+_processed_blocks_tmp.json
+
+# Local snapshots and generated visual copies
+07.07.11.html
