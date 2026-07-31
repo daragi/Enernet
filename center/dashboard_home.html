@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="enernet 업무 기능 Home">
+  <title>Home | enernet</title>
+  <link rel="stylesheet" href="/assets/service_order.css?v=20260720-5">
+  <link rel="stylesheet" href="/assets/home.css?v=20260720-5">
+  <script src="/assets/dashboard.js?v=20260720-5" defer></script>
+  <script src="/assets/home.js?v=20260720-5" defer></script>
+</head>
+<body class="home-page">
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="주요 메뉴">
+      <a class="brand home-brand" href="/" aria-label="Home">
+        <img class="brand-logo sidebar-logo" src="/assets/enernet_logo.png" alt="enernet">
+      </a>
+
+      <nav class="workspace-nav" aria-label="업무 메뉴">
+        <p class="nav-heading">업무 메뉴</p>
+        <a class="nav-item is-active" href="/" aria-current="page">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5v8.25A1.25 1.25 0 0 1 18.75 20h-13.5A1.25 1.25 0 0 1 4 18.75Z"/><path d="M9 20v-6h6v6"/></svg>
+          <span>Home</span>
+        </a>
+        <a class="nav-item" href="/service_order/">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 4h14v16H5z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+          <span>서비스오더</span>
+        </a>
+        <span class="nav-item is-disabled" aria-disabled="true">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 5h16v12H8l-4 3Z"/><path d="M8 9h8M8 13h5"/></svg>
+          <span>VOC</span><small>준비 중</small>
+        </span>
+        <span class="nav-item is-disabled" aria-disabled="true">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v8M8 12h8"/></svg>
+          <span>CCM</span><small>준비 중</small>
+        </span>
+        <span class="nav-item is-disabled" aria-disabled="true">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3v3M6 5l2 2M18 5l-2 2M4 11h3M17 11h3"/><path d="M8 20h8l1-8a5 5 0 0 0-10 0Z"/></svg>
+          <span>계량기</span><small>준비 중</small>
+        </span>
+      </nav>
+
+      <div class="server-box is-checking" data-server-status aria-live="polite">
+        <span class="server-dot" aria-hidden="true"></span>
+        <span>
+          <strong data-server-status-text>서버 확인 중</strong>
+          <small data-server-address>desktop-004:8000</small>
+        </span>
+      </div>
+    </aside>
+
+    <main class="main-content home-main">
+      <section class="home-stage" data-home-stage aria-labelledby="home-title">
+        <canvas class="home-particles" data-home-particles aria-hidden="true"></canvas>
+        <div class="ambient-particles" aria-hidden="true">
+          <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+          <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+        </div>
+        <svg class="brand-wave" data-parallax="0.45" aria-hidden="true" viewBox="0 0 720 330" preserveAspectRatio="none">
+          <path d="M-80 45C-15 0 50 0 115 45s130 45 195 0 130-45 195 0 130 45 195 0 130-45 195 0"/>
+          <path d="M-80 92C-15 47 50 47 115 92s130 45 195 0 130-45 195 0 130 45 195 0 130-45 195 0"/>
+          <path d="M-80 139C-15 94 50 94 115 139s130 45 195 0 130-45 195 0 130 45 195 0 130-45 195 0"/>
+          <path d="M-80 186C-15 141 50 141 115 186s130 45 195 0 130-45 195 0 130 45 195 0 130-45 195 0"/>
+          <path d="M-80 233C-15 188 50 188 115 233s130 45 195 0 130-45 195 0 130 45 195 0 130-45 195 0"/>
+        </svg>
+        <div class="brand-geometry" data-parallax="0.8" aria-hidden="true">
+          <span></span><span></span><span></span>
+        </div>
+
+        <header class="home-masthead" data-reveal data-parallax="0.16">
+          <img class="hero-logo" src="/assets/enernet_logo.png" alt="enernet">
+          <h1 id="home-title">서비스품질팀</h1>
+        </header>
+
+        <section class="feature-deck" aria-label="업무 기능" data-reveal>
+          <a class="feature-card is-available" href="/service_order/" data-tilt-card>
+            <span class="feature-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M5 4h14v16H5z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+            </span>
+            <span class="feature-copy">
+              <strong>서비스오더</strong>
+            </span>
+            <span class="feature-arrow" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M7 12h10M13 8l4 4-4 4"/></svg>
+            </span>
+          </a>
+
+          <article class="feature-card is-pending" tabindex="0" aria-label="VOC, 준비 중" data-tilt-card>
+            <span class="feature-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M4 5h16v12H8l-4 3Z"/><path d="M8 9h8M8 13h5"/></svg>
+            </span>
+            <span class="feature-copy"><strong>VOC</strong><small>준비 중</small></span>
+          </article>
+
+          <article class="feature-card is-pending" tabindex="0" aria-label="CCM, 준비 중" data-tilt-card>
+            <span class="feature-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v8M8 12h8"/></svg>
+            </span>
+            <span class="feature-copy"><strong>CCM</strong><small>준비 중</small></span>
+          </article>
+
+          <article class="feature-card is-pending" tabindex="0" aria-label="계량기, 준비 중" data-tilt-card>
+            <span class="feature-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M12 3v3M6 5l2 2M18 5l-2 2M4 11h3M17 11h3"/><path d="M8 20h8l1-8a5 5 0 0 0-10 0Z"/></svg>
+            </span>
+            <span class="feature-copy"><strong>계량기</strong><small>준비 중</small></span>
+          </article>
+        </section>
+      </section>
+    </main>
+  </div>
+</body>
+</html>
