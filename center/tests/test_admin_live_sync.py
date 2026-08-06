@@ -339,6 +339,114 @@ class AdminLiveSyncTest(TestCase):
                 0,
             )
 
+    def test_full_original_paste_is_not_limited_to_current_upload_period(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            store = DashboardStore(root / "metrics.sqlite3")
+            manager = server.CurrentJobManager()
+            (root / "results").mkdir()
+            current = sample_orders()
+            other = sample_orders().copy()
+            other.loc[0, "오더번호"] = "90000002"
+            other.loc[0, "오더생성일"] = pd.Timestamp("2026-07-17")
+            other.loc[0, "생성인"] = "테스트"
+            store.replace_totals(pd.concat([current, other], ignore_index=True))
+            empty = format_classified_orders(current.iloc[0:0])
+            pasted = "\t".join(other.columns) + "\n" + "\t".join(
+                str(value) if pd.notna(value) else ""
+                for value in other.iloc[0]
+            )
+
+            with (
+                patch.object(server, "DASHBOARD_STORE", store),
+                patch.object(
+                    server,
+                    "load_configuration",
+                    return_value=({"CSC_TEST": "테스트"}, set()),
+                ),
+                patch.object(server, "WEB_OUTPUT_ROOT", root / "results"),
+                patch.object(
+                    server,
+                    "CURRENT_JOB_MANIFEST_PATH",
+                    root / "results" / "current_job.json",
+                ),
+            ):
+                manager.replace(
+                    "current-job",
+                    "current.xlsx",
+                    current,
+                    empty,
+                    empty,
+                    period={"start": "2026-07-16", "end": "2026-07-16"},
+                    preprocessed_file="preprocessed.xlsx",
+                    candidate_file="candidate.xlsx",
+                )
+                preview = manager.preview_direct_error_rows("current-job", pasted)
+                approved = manager.approve_direct_error_rows("current-job", pasted)
+
+            self.assertEqual(preview["source_kind"], "pasted_original")
+            self.assertEqual(preview["ready_count"], 1)
+            self.assertEqual(approved["approved_count"], 1)
+            self.assertEqual(
+                store.period_status("2026-07-17", "2026-07-17")["error_count"],
+                1,
+            )
+
+    def test_headerless_full_original_row_is_resolved_by_column_order(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            store = DashboardStore(root / "metrics.sqlite3")
+            manager = server.CurrentJobManager()
+            (root / "results").mkdir()
+            current = sample_orders()
+            other = sample_orders().copy()
+            other.loc[0, "오더번호"] = "90000003"
+            other.loc[0, "오더생성일"] = pd.Timestamp("2026-07-18")
+            other.loc[0, "생성인"] = "테스트"
+            store.replace_totals(pd.concat([current, other], ignore_index=True))
+            empty = format_classified_orders(current.iloc[0:0])
+            # The original export can omit the first service-center column
+            # when a user copies a row only.  사업부 is enough to recover it.
+            source_row = other.drop(columns="서비스처리센터").iloc[0]
+            pasted = "\t".join(
+                str(value) if pd.notna(value) else "" for value in source_row
+            )
+
+            with (
+                patch.object(server, "DASHBOARD_STORE", store),
+                patch.object(
+                    server,
+                    "load_configuration",
+                    return_value=({"CSC_TEST": "테스트"}, set()),
+                ),
+                patch.object(server, "WEB_OUTPUT_ROOT", root / "results"),
+                patch.object(
+                    server,
+                    "CURRENT_JOB_MANIFEST_PATH",
+                    root / "results" / "current_job.json",
+                ),
+            ):
+                manager.replace(
+                    "current-job",
+                    "current.xlsx",
+                    current,
+                    empty,
+                    empty,
+                    period={"start": "2026-07-16", "end": "2026-07-16"},
+                    preprocessed_file="preprocessed.xlsx",
+                    candidate_file="candidate.xlsx",
+                )
+                preview = manager.preview_direct_error_rows("current-job", pasted)
+                approved = manager.approve_direct_error_rows("current-job", pasted)
+
+            self.assertEqual(preview["source_kind"], "pasted_original")
+            self.assertEqual(preview["ready_count"], 1)
+            self.assertEqual(approved["approved_count"], 1)
+            self.assertEqual(
+                store.period_status("2026-07-18", "2026-07-18")["error_count"],
+                1,
+            )
+
     def test_sap_mapping_change_reconnects_existing_approval(self) -> None:
         with TemporaryDirectory() as directory:
             root = Path(directory)
@@ -402,3 +510,148 @@ class AdminLiveSyncTest(TestCase):
                 finally:
                     connection.close()
                 self.assertEqual(person, "최신담당자")
+
+    def test_manual_approval_stages_remaining_candidates_for_normal_learning(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            store = DashboardStore(root / "metrics.sqlite3")
+            manager = server.CurrentJobManager()
+            (root / "results").mkdir()
+            orders = pd.concat([sample_orders()] * 3, ignore_index=True)
+            orders["오더번호"] = ["90000001", "90000002", "90000003"]
+            candidates = format_classified_orders(orders)
+            auto_errors = format_classified_orders(orders.iloc[0:0])
+            store.replace_totals(orders)
+
+            with (
+                patch.object(server, "DASHBOARD_STORE", store),
+                patch.object(server, "WEB_OUTPUT_ROOT", root / "results"),
+                patch.object(
+                    server,
+                    "CURRENT_JOB_MANIFEST_PATH",
+                    root / "results" / "current_job.json",
+                ),
+            ):
+                manager.replace(
+                    "a1b2c3d4e5f7",
+                    "review.xlsx",
+                    orders,
+                    candidates,
+                    auto_errors,
+                    period={"start": "2026-07-16", "end": "2026-07-16"},
+                    preprocessed_file="preprocessed.xlsx",
+                    candidate_file="candidate.xlsx",
+                )
+                manager.approve_rows("a1b2c3d4e5f7", [0])
+                manager.sync_active_views("a1b2c3d4e5f7")
+                reviewed = manager.reviewed_candidate_learning()
+
+                self.assertIsNotNone(reviewed)
+                assert reviewed is not None
+                self.assertEqual(reviewed.manual_approved_count, 1)
+                self.assertEqual(reviewed.remaining_candidate_count, 2)
+                self.assertEqual(len(reviewed.confirmed_errors), 1)
+
+                manager.rollback_latest("a1b2c3d4e5f7")
+                manager.sync_active_views(
+                    "a1b2c3d4e5f7",
+                    restore_order_numbers=["90000001"],
+                )
+                self.assertIsNone(manager.reviewed_candidate_learning())
+
+    def test_reviewed_candidates_are_learned_only_after_non_overlapping_upload(self) -> None:
+        previous_orders = pd.concat([sample_orders()] * 3, ignore_index=True)
+        previous_orders["오더번호"] = ["90000001", "90000002", "90000003"]
+        previous_confirmed = format_classified_orders(previous_orders.iloc[[0]])
+        reviewed = server.ReviewedCandidateLearning(
+            job_id="previous-job",
+            source_name="previous.xlsx",
+            period={"start": "2026-07-16", "end": "2026-07-16"},
+            preprocessed=previous_orders,
+            confirmed_errors=previous_confirmed,
+            remaining_candidates=format_classified_orders(
+                previous_orders.iloc[[1, 2]]
+            ),
+            remaining_candidate_count=2,
+            manual_approved_count=1,
+        )
+        current_orders = sample_orders().copy()
+        current_orders["오더번호"] = ["90000100"]
+        current_candidates = format_classified_orders(current_orders)
+        current = server.CurrentJob(
+            job_id="current-job",
+            source_name="current.xlsx",
+            preprocessed=current_orders,
+            candidates=current_candidates,
+            auto_errors=format_classified_orders(current_orders.iloc[0:0]),
+            confirmed_errors=format_classified_orders(current_orders.iloc[0:0]),
+            reviewable_order_numbers={"90000100"},
+            candidate_checked=[False],
+            created_at="2026-07-17T12:00:00+09:00",
+            period={"start": "2026-07-17", "end": "2026-07-17"},
+            preprocess_summary={},
+            candidate_summary={},
+            aggregate_summary={},
+            preprocessed_file="preprocessed.xlsx",
+            candidate_file="candidate.xlsx",
+        )
+        reviewed_summary = {
+            "active_total": 4,
+            "proposed_total": 10,
+            "new_active": 1,
+            "demoted": 0,
+            "current_candidate_impact": 2,
+            "evidence_snapshot_total": 2,
+            "evidence_pattern_total": 20,
+        }
+        current_summary = {
+            **reviewed_summary,
+            "active_total": 5,
+            "proposed_total": 12,
+            "new_active": 0,
+            "current_candidate_impact": 1,
+        }
+        with (
+            patch.object(server, "load_configuration", return_value=({}, set())),
+            patch.object(
+                server,
+                "refresh_error_rules_registry",
+                return_value={"rule_count": 100},
+            ),
+            patch.object(
+                server,
+                "update_auto_normal_pattern_registry",
+                side_effect=[reviewed_summary, current_summary],
+            ) as update_normal,
+        ):
+            result = server.finalize_reviewed_candidate_learning(
+                reviewed,
+                current,
+            )
+
+        self.assertEqual(result["state"], "applied")
+        self.assertEqual(update_normal.call_count, 2)
+        self.assertTrue(update_normal.call_args_list[0].args[1].empty)
+        self.assertEqual(len(update_normal.call_args_list[0].args[2]), 1)
+        self.assertEqual(
+            len(
+                update_normal.call_args_list[0].kwargs[
+                    "verified_normal_candidates"
+                ]
+            ),
+            2,
+        )
+        self.assertEqual(len(update_normal.call_args_list[1].args[1]), 1)
+        self.assertEqual(current.candidate_summary["자동정상활성패턴수"], 5)
+
+        current.period = {"start": "2026-07-16", "end": "2026-07-17"}
+        with patch.object(
+            server,
+            "update_auto_normal_pattern_registry",
+        ) as overlapping_update:
+            skipped = server.finalize_reviewed_candidate_learning(
+                reviewed,
+                current,
+            )
+        self.assertEqual(skipped["state"], "skipped_overlap")
+        overlapping_update.assert_not_called()

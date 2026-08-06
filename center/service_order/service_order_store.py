@@ -1760,6 +1760,11 @@ class DashboardStore:
         businesses.extend(sorted(found_businesses - set(businesses)))
         months = [row["year_month"] for row in month_rows]
         years = sorted({int(value[:4]) for value in months})
+        latest_date = str(bounds["end_date"] or "") if bounds else ""
+        defaults = {}
+        if latest_date:
+            latest = self._parse_iso_date(latest_date, "end")
+            defaults = {"year": latest.year, "month": latest.month}
         return {
             "businesses": businesses,
             "people": [
@@ -1776,6 +1781,7 @@ class DashboardStore:
                 "start": bounds["start_date"] if bounds else None,
                 "end": bounds["end_date"] if bounds else None,
             },
+            "defaults": defaults,
         }
 
     def status(self) -> dict[str, object]:
@@ -1830,6 +1836,37 @@ class DashboardStore:
             return date.fromisoformat(value)
         except (TypeError, ValueError) as error:
             raise ValueError(f"{field}는 YYYY-MM-DD 형식이어야 합니다.") from error
+
+    @staticmethod
+    def _shift_calendar_month(value: date, months: int) -> date:
+        """Move by calendar months and clamp dates such as 31st to month end."""
+        target = value.year * 12 + (value.month - 1) + months
+        year, month_index = divmod(target, 12)
+        month = month_index + 1
+        return date(year, month, min(value.day, monthrange(year, month)[1]))
+
+    @staticmethod
+    def _shift_calendar_year(value: date, years: int) -> date:
+        year = value.year + years
+        return date(year, value.month, min(value.day, monthrange(year, value.month)[1]))
+
+    def _comparison_window(
+        self,
+        start_date: date,
+        end_date: date,
+        comparison_mode: str,
+    ) -> tuple[date, date]:
+        if comparison_mode == "previous_month":
+            return (
+                self._shift_calendar_month(start_date, -1),
+                self._shift_calendar_month(end_date, -1),
+            )
+        if comparison_mode == "previous_year":
+            return (
+                self._shift_calendar_year(start_date, -1),
+                self._shift_calendar_year(end_date, -1),
+            )
+        raise ValueError("comparison_mode는 previous_month 또는 previous_year여야 합니다.")
 
     def _time_window(
         self,
@@ -1936,6 +1973,7 @@ class DashboardStore:
         month: int | None,
         start: str | None,
         end: str | None,
+        comparison_mode: str = "previous_month",
         limit: int = 10,
     ) -> dict[str, object]:
         if scope not in {"person", "business"}:
@@ -1958,9 +1996,10 @@ class DashboardStore:
         comparison_current_end = end_date
         previous_where = ""
         previous_parameters: list[object] = []
-        if time_mode == "month":
-            previous_end = start_date - timedelta(days=1)
-            previous_start = date(previous_end.year, previous_end.month, 1)
+        if time_mode in {"year", "month", "range"}:
+            previous_start, previous_end = self._comparison_window(
+                start_date, end_date, comparison_mode
+            )
             previous_where, previous_parameters = self._where_clause(
                 previous_start, previous_end, person, business
             )
@@ -1969,6 +2008,20 @@ class DashboardStore:
         )
         multi_business = scope == "business" and not business
         series_sql = "business" if multi_business else "''"
+        yearly_clauses = ["1=1"]
+        yearly_parameters: list[object] = []
+        if person:
+            yearly_clauses.append("person = ?")
+            yearly_parameters.append(person)
+        if business:
+            yearly_clauses.append("business = ?")
+            yearly_parameters.append(business)
+        # A monthly selection compares the same month across years.  For a
+        # year/range selection it compares complete available calendar years.
+        if time_mode == "month" and month:
+            yearly_clauses.append("SUBSTR(order_date, 6, 2) = ?")
+            yearly_parameters.append(f"{int(month):02d}")
+        yearly_where = " AND ".join(yearly_clauses)
 
         with self._lock, self._connection() as connection:
             summary_row = connection.execute(
@@ -1990,6 +2043,18 @@ class DashboardStore:
                 ORDER BY bucket, series_name
                 """,
                 parameters,
+            ).fetchall()
+            yearly_rate_rows = connection.execute(
+                f"""
+                SELECT SUBSTR(order_date, 1, 4) AS year,
+                       SUM(total_count) AS total_count,
+                       SUM(error_count) AS error_count
+                FROM service_order_metrics
+                WHERE {yearly_where}
+                GROUP BY SUBSTR(order_date, 1, 4)
+                ORDER BY year
+                """,
+                yearly_parameters,
             ).fetchall()
             subcategory_rows = connection.execute(
                 f"""
@@ -2013,14 +2078,27 @@ class DashboardStore:
             ).fetchall()
             person_rows = connection.execute(
                 f"""
-                SELECT person AS name, MAX(business) AS business,
+                SELECT person AS name, business AS business,
                        SUM(total_count) AS total_count,
                        SUM(error_count) AS error_count
                 FROM service_order_metrics WHERE {where}
-                GROUP BY person
+                GROUP BY person, business
                 """,
                 parameters,
             ).fetchall()
+            person_business_rows: list[sqlite3.Row] = []
+            if scope == "person" and person and business:
+                person_business_rows = connection.execute(
+                    """
+                    SELECT person AS name,
+                           SUM(total_count) AS total_count,
+                           SUM(error_count) AS error_count
+                    FROM service_order_metrics
+                    WHERE order_date BETWEEN ? AND ? AND business = ?
+                    GROUP BY person
+                    """,
+                    (start_date.isoformat(), end_date.isoformat(), business),
+                ).fetchall()
             new_error_row = connection.execute(
                 f"""
                 SELECT COUNT(*) AS count,
@@ -2066,12 +2144,10 @@ class DashboardStore:
                         str(current_last_value), "last_data_date"
                     )
                     comparison_current_end = min(end_date, current_last_date)
-                    elapsed_days = max(
-                        0, (comparison_current_end - start_date).days
-                    )
-                    previous_end = min(
-                        previous_end,
-                        previous_start + timedelta(days=elapsed_days),
+                    previous_start, previous_end = self._comparison_window(
+                        start_date,
+                        comparison_current_end,
+                        comparison_mode,
                     )
                     previous_where, previous_parameters = self._where_clause(
                         previous_start, previous_end, person, business
@@ -2106,11 +2182,11 @@ class DashboardStore:
                 ).fetchall()
                 previous_person_rows = connection.execute(
                     f"""
-                    SELECT person AS name, MAX(business) AS business,
+                    SELECT person AS name, business AS business,
                            SUM(total_count) AS total_count,
                            SUM(error_count) AS error_count
                     FROM service_order_metrics WHERE {previous_where}
-                    GROUP BY person
+                    GROUP BY person, business
                     """,
                     previous_parameters,
                 ).fetchall()
@@ -2181,6 +2257,18 @@ class DashboardStore:
                 )
             trend_series.append({"name": series_name, "points": points})
 
+        yearly_rate = [
+            {
+                "date": str(row["year"]),
+                "total_count": int(row["total_count"]),
+                "error_count": int(row["error_count"]),
+                "error_rate": self._rate(
+                    int(row["error_count"]), int(row["total_count"])
+                ),
+            }
+            for row in yearly_rate_rows
+        ]
+
         previous_total = (
             int(previous_summary_row["total_count"])
             if previous_summary_row is not None
@@ -2196,11 +2284,23 @@ class DashboardStore:
         def comparison_causes(
             current_rows: Iterable[sqlite3.Row],
             previous_rows: Iterable[sqlite3.Row],
+            *,
+            business_order: bool = False,
         ) -> list[dict[str, object]]:
             if not comparison_available:
                 return []
+            def dimension_key(row: sqlite3.Row) -> tuple[str, str]:
+                name = str(row["name"])
+                business = (
+                    str(row["business"])
+                    if "business" in row.keys() and row["business"] is not None
+                    else ""
+                )
+                return name, business
+
             current_map = {
-                str(row["name"]): {
+                dimension_key(row): {
+                    "name": str(row["name"]),
                     "total_count": int(row["total_count"]),
                     "error_count": int(row["error_count"]),
                     "business": (
@@ -2212,7 +2312,8 @@ class DashboardStore:
                 for row in current_rows
             }
             previous_map = {
-                str(row["name"]): {
+                dimension_key(row): {
+                    "name": str(row["name"]),
                     "total_count": int(row["total_count"]),
                     "error_count": int(row["error_count"]),
                     "business": (
@@ -2224,12 +2325,14 @@ class DashboardStore:
                 for row in previous_rows
             }
             values: list[dict[str, object]] = []
-            for name in set(current_map) | set(previous_map):
+            for key in set(current_map) | set(previous_map):
                 current = current_map.get(
-                    name, {"total_count": 0, "error_count": 0, "business": ""}
+                    key,
+                    {"name": key[0], "total_count": 0, "error_count": 0, "business": ""},
                 )
                 previous = previous_map.get(
-                    name, {"total_count": 0, "error_count": 0, "business": ""}
+                    key,
+                    {"name": key[0], "total_count": 0, "error_count": 0, "business": ""},
                 )
                 current_rate = self._rate(
                     int(current["error_count"]), int(current["total_count"])
@@ -2239,7 +2342,7 @@ class DashboardStore:
                 )
                 values.append(
                     {
-                        "name": name,
+                        "name": current["name"] or previous["name"],
                         "business": current["business"] or previous["business"],
                         "current_count": int(current["error_count"]),
                         "previous_count": int(previous["error_count"]),
@@ -2250,13 +2353,22 @@ class DashboardStore:
                         "delta_rate": round(current_rate - previous_rate, 2),
                     }
                 )
-            values.sort(
-                key=lambda item: (
-                    -abs(int(item["delta_count"])),
-                    -int(item["current_count"]),
-                    str(item["name"]),
+            if business_order:
+                order = {name: index for index, name in enumerate(BUSINESS_ORDER)}
+                values.sort(
+                    key=lambda item: (
+                        order.get(str(item["name"]), len(order)),
+                        str(item["name"]),
+                    )
                 )
-            )
+            else:
+                values.sort(
+                    key=lambda item: (
+                        -abs(int(item["delta_count"])),
+                        -int(item["current_count"]),
+                        str(item["name"]),
+                    )
+                )
             return values[:10]
 
         previous_daily_rates = [
@@ -2266,6 +2378,7 @@ class DashboardStore:
         ]
         comparison = {
             "available": comparison_available,
+            "mode": comparison_mode,
             "current_period": {
                 "start": start_date.isoformat(),
                 "end": comparison_current_end.isoformat(),
@@ -2295,7 +2408,9 @@ class DashboardStore:
             },
             "causes": {
                 "business": comparison_causes(
-                    business_rows, previous_business_rows
+                    business_rows,
+                    previous_business_rows,
+                    business_order=True,
                 ),
                 "subcategory": comparison_causes(
                     subcategory_rows, previous_subcategory_rows
@@ -2355,7 +2470,7 @@ class DashboardStore:
                 str(item["signature"]),
             ),
         ):
-            if int(item["count"]) < 2:
+            if int(item["count"]) < 3:
                 continue
             monthly_counts = item.get("months", {})
             item["months"] = [
@@ -2460,6 +2575,117 @@ class DashboardStore:
                     item["rank"] = index
             return {"count": by_count, "rate": by_rate}
 
+        person_analysis: dict[str, object] | None = None
+        if scope == "person" and person:
+            detail_frame, _ = self.new_error_details(
+                time_mode=time_mode,
+                year=year,
+                month=month,
+                start=start,
+                end=end,
+                person=person,
+                business=business,
+            )
+            detail_text = pd.Series("", index=detail_frame.index, dtype="string")
+            for column in ("내역", "내역2"):
+                if column in detail_frame.columns:
+                    candidate = detail_frame[column].astype("string").fillna("")
+                    candidate = candidate.str.replace(r"\s+", " ", regex=True).str.strip()
+                    detail_text = detail_text.mask(detail_text.eq(""), candidate)
+            detail_text = detail_text.mask(detail_text.eq(""), "내역 미확인")
+            category_text = (
+                detail_frame["소분류"].astype("string").fillna("미분류")
+                if "소분류" in detail_frame.columns
+                else pd.Series("미분류", index=detail_frame.index, dtype="string")
+            )
+            detail_groups = (
+                pd.DataFrame({"subcategory": category_text, "detail": detail_text})
+                .groupby(["subcategory", "detail"], dropna=False, as_index=False)
+                .size()
+                .sort_values(["size", "subcategory", "detail"], ascending=[False, True, True])
+            )
+            person_subcategories = sorted(
+                [
+                    {
+                        "name": str(row["name"]),
+                        "total_count": int(row["total_count"]),
+                        "error_count": int(row["error_count"]),
+                        "error_rate": self._rate(
+                            int(row["error_count"]), int(row["total_count"])
+                        ),
+                    }
+                    for row in subcategory_rows
+                    if int(row["error_count"]) > 0
+                ],
+                key=lambda item: (
+                    -int(item["error_count"]),
+                    -float(item["error_rate"]),
+                    str(item["name"]),
+                ),
+            )
+            benchmark: dict[str, object] | None = None
+            if person_business_rows and business:
+                ordered_people = sorted(
+                    (
+                        {
+                            "name": str(row["name"]),
+                            "total_count": int(row["total_count"]),
+                            "error_count": int(row["error_count"]),
+                            "error_rate": self._rate(
+                                int(row["error_count"]), int(row["total_count"])
+                            ),
+                        }
+                        for row in person_business_rows
+                    ),
+                    key=lambda item: (
+                        -int(item["error_count"]),
+                        -float(item["error_rate"]),
+                        str(item["name"]),
+                    ),
+                )
+                business_error_count = sum(
+                    int(item["error_count"]) for item in ordered_people
+                )
+                person_rank = next(
+                    (
+                        index
+                        for index, item in enumerate(ordered_people, start=1)
+                        if item["name"] == person
+                    ),
+                    None,
+                )
+                if error_count > 0 and business_error_count > 0 and person_rank:
+                    benchmark = {
+                        "available": True,
+                        "business": business,
+                        "business_error_count": business_error_count,
+                        "business_person_count": len(ordered_people),
+                        "person_error_count": error_count,
+                        "rank": person_rank,
+                        "person_share": round(
+                            error_count / business_error_count * 100, 1
+                        ),
+                    }
+            person_analysis = {
+                "comparison": {
+                    "available": comparison_available,
+                    "mode": comparison_mode,
+                    "current_count": error_count,
+                    "previous_count": previous_errors,
+                    "delta_count": error_count - previous_errors,
+                },
+                "subcategories": person_subcategories,
+                "business_benchmark": benchmark,
+                "details": [
+                    {
+                        "subcategory": str(row.subcategory),
+                        "detail": str(row.detail),
+                        "count": int(row.size),
+                    }
+                    for row in detail_groups.itertuples(index=False)
+                ],
+            }
+
         return {
             "filters": {
                 "scope": scope,
@@ -2479,10 +2705,12 @@ class DashboardStore:
             "trend": {
                 "granularity": granularity,
                 "series": trend_series,
+                "yearly_rate": yearly_rate,
             },
             "comparison": comparison,
             "patterns": patterns,
             "business_status": {"items": business_status_items},
+            "person_analysis": person_analysis,
             "rankings": {
                 "subcategory": ranked(subcategory_rows),
                 "person": ranked(person_rows),

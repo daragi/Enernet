@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "rule_version": "cutoff-2026-07-22",
-  "generated_at": "2026-07-31T09:07:38.403004+09:00",
-  "training_cutoff": "2026-07-22",
-  "source_rules_sha256": "ffe551d73b03b05dd97ed8e4dd9f08ce687d1b223dd8f924df304f8e635dc2fd",
+  "rule_version": "cutoff-2026-07-31",
+  "generated_at": "2026-08-04T09:42:36.239557+09:00",
+  "training_cutoff": "2026-07-31",
+  "source_rules_sha256": "4a1182657098f5a4272aec229c34e8918b30515c804001596fd8a663f36e0b3d",
   "source_manifest": [
     {
       "role": "historical_truth",
@@ -14,14 +14,14 @@
     {
       "role": "approval_database",
       "file": "service_order_metrics.sqlite3",
-      "size_bytes": 12836864,
-      "mtime_ns": 1785456375566421000
+      "size_bytes": 14811136,
+      "mtime_ns": 1785804085784178000
     },
     {
       "role": "current_job_manifest",
       "file": "current_job.json",
-      "size_bytes": 3236,
-      "mtime_ns": 1785456376371144400
+      "size_bytes": 3561,
+      "mtime_ns": 1785804086601773000
     },
     {
       "role": "except_list",
@@ -70,21 +70,21 @@
     "same_subcategory_only": true
   },
   "migration_summary": {
-    "source_origin_count": 1006,
-    "canonical_rule_count": 1006,
+    "source_origin_count": 1025,
+    "canonical_rule_count": 1025,
     "merged_duplicate_origin_count": 0,
     "source_counts": {
-      "exact": 512,
-      "phrase": 494
+      "exact": 524,
+      "phrase": 501
     },
     "decision_counts": {
-      "audit_only": 132,
-      "auto_error": 855,
+      "audit_only": 138,
+      "auto_error": 868,
       "review_lock": 19
     },
     "status_counts": {
-      "active": 855,
-      "ambiguous": 151
+      "active": 868,
+      "ambiguous": 157
     }
   },
   "rules": [
@@ -5918,7 +5918,7 @@
             "strength": "review",
             "raw_pattern": "미계약사용세대중지 계량기 사진 메신저 현장에서 주택관리 건물주 번호",
             "evidence": {
-              "confirmed_count": 2,
+              "confirmed_count": 5,
               "normal_count": 3
             }
           }
@@ -7867,6 +7867,85 @@
       }
     },
     {
+      "rule_id": "error_38678b335888dfc0bc45",
+      "source_subcategory": "계량기일반",
+      "pattern": {
+        "kind": "exact_normalized",
+        "value": "혹서기검침 게량기사진올려주세요",
+        "tokens": [
+          "혹서기검침",
+          "게량기사진올려주세요"
+        ]
+      },
+      "source": [
+        "error_pattern.json"
+      ],
+      "status": "active",
+      "scope": {
+        "source_subcategory": "계량기일반",
+        "application": "source_subcategory_only"
+      },
+      "strength": "exact",
+      "decision": "auto_error",
+      "evidence": {
+        "origins": [
+          {
+            "source": "error_pattern.json",
+            "status": "active",
+            "scope": "source_subcategory_only",
+            "strength": "exact",
+            "raw_pattern": "혹서기검침 게량기사진올려주세요",
+            "evidence": {
+              "confirmed_count": 3,
+              "normal_count": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "rule_id": "error_1b806b66983c9089cddb",
+      "source_subcategory": "계량기일반",
+      "pattern": {
+        "kind": "ordered_distinct_tokens",
+        "value": "건물주 번호",
+        "tokens": [
+          "건물주",
+          "번호"
+        ]
+      },
+      "source": [
+        "error_pattern.json"
+      ],
+      "status": "ambiguous",
+      "scope": {
+        "source_subcategory": "계량기일반",
+        "application": "source_subcategory_only"
+      },
+      "strength": "audit",
+      "decision": "audit_only",
+      "evidence": {
+        "origins": [
+          {
+            "source": "error_pattern.json",
+            "status": "ambiguous",
+            "scope": "source_subcategory_only",
+            "strength": "audit",
+            "raw_pattern": "건물주 번호",
+            "evidence": {
+              "token_count": 2,
+              "confirmed_count": 5,
+              "normal_count": 3,
+              "distinct_confirmed_signatures": 1,
+              "learning_modes": [
+                "contiguous"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
       "rule_id": "error_3db1496f31bd12312d28",
       "source_subcategory": "계량기일반",
       "pattern": {
@@ -8582,7 +8661,7 @@
             "raw_pattern": "계량기 사진",
             "evidence": {
               "token_count": 2,
-              "confirmed_count": 18,
+              "confirmed_count": 21,
               "normal_count": 63,
               "distinct_confirmed_signatures": 14,
               "learning_modes": [
@@ -8625,7 +8704,7 @@
             "raw_pattern": "계량기 사진 메신저",
             "evidence": {
               "token_count": 3,
-              "confirmed_count": 5,
+              "confirmed_count": 8,
               "normal_count": 16,
               "distinct_confirmed_signatures": 4,
               "learning_modes": [
@@ -8669,7 +8748,7 @@
             "raw_pattern": "계량기 사진 메신저 현장에서",
             "evidence": {
               "token_count": 4,
-              "confirmed_count": 2,
+              "confirmed_count": 5,
               "normal_count": 4,
               "distinct_confirmed_signatures": 1,
               "learning_modes": [
@@ -10300,6 +10379,48 @@
       }
     },
     {
+      "rule_id": "error_fcc24e172a487bb59524",
+      "source_subcategory": "계량기일반",
+      "pattern": {
+        "kind": "ordered_distinct_tokens",
+        "value": "메신저 현장에서",
+        "tokens": [
+          "메신저",
+          "현장에서"
+        ]
+      },
+      "source": [
+        "error_pattern.json"
+      ],
+      "status": "ambiguous",
+      "scope": {
+        "source_subcategory": "계량기일반",
+        "application": "source_subcategory_only"
+      },
+      "strength": "audit",
+      "decision": "audit_only",
+      "evidence": {
+        "origins": [
+          {
+            "source": "error_pattern.json",
+            "status": "ambiguous",
+            "scope": "source_subcategory_only",
+            "strength": "audit",
+            "raw_pattern": "메신저 현장에서",
+            "evidence": {
+              "token_count": 2,
+              "confirmed_count": 5,
+              "normal_count": 4,
+              "distinct_confirmed_signatures": 1,
+              "learning_modes": [
+                "contiguous"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
       "rule_id": "error_e61f5bb252ac2e66ea7a",
       "source_subcategory": "계량기일반",
       "pattern": {
@@ -10331,7 +10452,7 @@
             "raw_pattern": "메신저 현장에서 주택관리",
             "evidence": {
               "token_count": 3,
-              "confirmed_count": 2,
+              "confirmed_count": 5,
               "normal_count": 3,
               "distinct_confirmed_signatures": 1,
               "learning_modes": [
@@ -10375,7 +10496,7 @@
             "raw_pattern": "메신저 현장에서 주택관리 건물주",
             "evidence": {
               "token_count": 4,
-              "confirmed_count": 2,
+              "confirmed_count": 5,
               "normal_count": 3,
               "distinct_confirmed_signatures": 1,
               "learning_modes": [
@@ -10472,6 +10593,48 @@
       }
     },
     {
+      "rule_id": "error_feeb237f89f1e88b1c22",
+      "source_subcategory": "계량기일반",
+      "pattern": {
+        "kind": "ordered_distinct_tokens",
+        "value": "미계약사용세대중지 계량기",
+        "tokens": [
+          "미계약사용세대중지",
+          "계량기"
+        ]
+      },
+      "source": [
+        "error_pattern.json"
+      ],
+      "status": "ambiguous",
+      "scope": {
+        "source_subcategory": "계량기일반",
+        "application": "source_subcategory_only"
+      },
+      "strength": "audit",
+      "decision": "audit_only",
+      "evidence": {
+        "origins": [
+          {
+            "source": "error_pattern.json",
+            "status": "ambiguous",
+            "scope": "source_subcategory_only",
+            "strength": "audit",
+            "raw_pattern": "미계약사용세대중지 계량기",
+            "evidence": {
+              "token_count": 2,
+              "confirmed_count": 5,
+              "normal_count": 4,
+              "distinct_confirmed_signatures": 1,
+              "learning_modes": [
+                "contiguous"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
       "rule_id": "error_4cdf9d61e55ea75322ee",
       "source_subcategory": "계량기일반",
       "pattern": {
@@ -10503,7 +10666,7 @@
             "raw_pattern": "미계약사용세대중지 계량기 사진",
             "evidence": {
               "token_count": 3,
-              "confirmed_count": 2,
+              "confirmed_count": 5,
               "normal_count": 4,
               "distinct_confirmed_signatures": 1,
               "learning_modes": [
@@ -10547,7 +10710,7 @@
             "raw_pattern": "미계약사용세대중지 계량기 사진 메신저",
             "evidence": {
               "token_count": 4,
-              "confirmed_count": 2,
+              "confirmed_count": 5,
               "normal_count": 4,
               "distinct_confirmed_signatures": 1,
               "learning_modes": [
@@ -13255,6 +13418,48 @@
       }
     },
     {
+      "rule_id": "error_f216810f4895455ed6b6",
+      "source_subcategory": "계량기일반",
+      "pattern": {
+        "kind": "ordered_distinct_tokens",
+        "value": "사진 메신저",
+        "tokens": [
+          "사진",
+          "메신저"
+        ]
+      },
+      "source": [
+        "error_pattern.json"
+      ],
+      "status": "ambiguous",
+      "scope": {
+        "source_subcategory": "계량기일반",
+        "application": "source_subcategory_only"
+      },
+      "strength": "audit",
+      "decision": "audit_only",
+      "evidence": {
+        "origins": [
+          {
+            "source": "error_pattern.json",
+            "status": "ambiguous",
+            "scope": "source_subcategory_only",
+            "strength": "audit",
+            "raw_pattern": "사진 메신저",
+            "evidence": {
+              "token_count": 2,
+              "confirmed_count": 9,
+              "normal_count": 16,
+              "distinct_confirmed_signatures": 5,
+              "learning_modes": [
+                "contiguous"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
       "rule_id": "error_dc1debf82b7f59756e6f",
       "source_subcategory": "계량기일반",
       "pattern": {
@@ -13286,7 +13491,7 @@
             "raw_pattern": "사진 메신저 현장에서",
             "evidence": {
               "token_count": 3,
-              "confirmed_count": 2,
+              "confirmed_count": 5,
               "normal_count": 4,
               "distinct_confirmed_signatures": 1,
               "learning_modes": [
@@ -13330,7 +13535,7 @@
             "raw_pattern": "사진 메신저 현장에서 주택관리",
             "evidence": {
               "token_count": 4,
-              "confirmed_count": 2,
+              "confirmed_count": 5,
               "normal_count": 3,
               "distinct_confirmed_signatures": 1,
               "learning_modes": [
@@ -15273,6 +15478,48 @@
       }
     },
     {
+      "rule_id": "error_65a38c9f48283ee1c8cf",
+      "source_subcategory": "계량기일반",
+      "pattern": {
+        "kind": "ordered_distinct_tokens",
+        "value": "주택관리 건물주",
+        "tokens": [
+          "주택관리",
+          "건물주"
+        ]
+      },
+      "source": [
+        "error_pattern.json"
+      ],
+      "status": "ambiguous",
+      "scope": {
+        "source_subcategory": "계량기일반",
+        "application": "source_subcategory_only"
+      },
+      "strength": "audit",
+      "decision": "audit_only",
+      "evidence": {
+        "origins": [
+          {
+            "source": "error_pattern.json",
+            "status": "ambiguous",
+            "scope": "source_subcategory_only",
+            "strength": "audit",
+            "raw_pattern": "주택관리 건물주",
+            "evidence": {
+              "token_count": 2,
+              "confirmed_count": 5,
+              "normal_count": 3,
+              "distinct_confirmed_signatures": 1,
+              "learning_modes": [
+                "contiguous"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
       "rule_id": "error_696eb1f5777a9a0973a5",
       "source_subcategory": "계량기일반",
       "pattern": {
@@ -15304,7 +15551,7 @@
             "raw_pattern": "주택관리 건물주 번호",
             "evidence": {
               "token_count": 3,
-              "confirmed_count": 2,
+              "confirmed_count": 5,
               "normal_count": 3,
               "distinct_confirmed_signatures": 1,
               "learning_modes": [
@@ -16174,6 +16421,48 @@
       }
     },
     {
+      "rule_id": "error_4fb23a21227a3ef9d540",
+      "source_subcategory": "계량기일반",
+      "pattern": {
+        "kind": "ordered_distinct_tokens",
+        "value": "현장에서 주택관리",
+        "tokens": [
+          "현장에서",
+          "주택관리"
+        ]
+      },
+      "source": [
+        "error_pattern.json"
+      ],
+      "status": "ambiguous",
+      "scope": {
+        "source_subcategory": "계량기일반",
+        "application": "source_subcategory_only"
+      },
+      "strength": "audit",
+      "decision": "audit_only",
+      "evidence": {
+        "origins": [
+          {
+            "source": "error_pattern.json",
+            "status": "ambiguous",
+            "scope": "source_subcategory_only",
+            "strength": "audit",
+            "raw_pattern": "현장에서 주택관리",
+            "evidence": {
+              "token_count": 2,
+              "confirmed_count": 5,
+              "normal_count": 3,
+              "distinct_confirmed_signatures": 1,
+              "learning_modes": [
+                "contiguous"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
       "rule_id": "error_df39005d30af41376b94",
       "source_subcategory": "계량기일반",
       "pattern": {
@@ -16205,7 +16494,7 @@
             "raw_pattern": "현장에서 주택관리 건물주",
             "evidence": {
               "token_count": 3,
-              "confirmed_count": 2,
+              "confirmed_count": 5,
               "normal_count": 3,
               "distinct_confirmed_signatures": 1,
               "learning_modes": [
@@ -16249,8 +16538,50 @@
             "raw_pattern": "현장에서 주택관리 건물주 번호",
             "evidence": {
               "token_count": 4,
-              "confirmed_count": 2,
+              "confirmed_count": 5,
               "normal_count": 3,
+              "distinct_confirmed_signatures": 1,
+              "learning_modes": [
+                "contiguous"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "rule_id": "error_7ee99e38447ca2def970",
+      "source_subcategory": "계량기일반",
+      "pattern": {
+        "kind": "ordered_distinct_tokens",
+        "value": "혹서기검침 게량기사진올려주세요",
+        "tokens": [
+          "혹서기검침",
+          "게량기사진올려주세요"
+        ]
+      },
+      "source": [
+        "error_pattern.json"
+      ],
+      "status": "active",
+      "scope": {
+        "source_subcategory": "계량기일반",
+        "application": "source_subcategory_only"
+      },
+      "strength": "phrase",
+      "decision": "auto_error",
+      "evidence": {
+        "origins": [
+          {
+            "source": "error_pattern.json",
+            "status": "active",
+            "scope": "source_subcategory_only",
+            "strength": "phrase",
+            "raw_pattern": "혹서기검침 게량기사진올려주세요",
+            "evidence": {
+              "token_count": 2,
+              "confirmed_count": 3,
+              "normal_count": 0,
               "distinct_confirmed_signatures": 1,
               "learning_modes": [
                 "contiguous"
@@ -17180,6 +17511,46 @@
       }
     },
     {
+      "rule_id": "error_e65b70962feacb7a61cf",
+      "source_subcategory": "공급중지",
+      "pattern": {
+        "kind": "exact_normalized",
+        "value": "공급중지문의 다음주금요일넉넉잡고 납부 몇시까지해야 재연결받을수있는지",
+        "tokens": [
+          "공급중지문의",
+          "다음주금요일넉넉잡고",
+          "납부",
+          "몇시까지해야",
+          "재연결받을수있는지"
+        ]
+      },
+      "source": [
+        "error_pattern.json"
+      ],
+      "status": "active",
+      "scope": {
+        "source_subcategory": "공급중지",
+        "application": "source_subcategory_only"
+      },
+      "strength": "exact",
+      "decision": "auto_error",
+      "evidence": {
+        "origins": [
+          {
+            "source": "error_pattern.json",
+            "status": "active",
+            "scope": "source_subcategory_only",
+            "strength": "exact",
+            "raw_pattern": "공급중지문의 다음주금요일넉넉잡고 납부 몇시까지해야 재연결받을수있는지",
+            "evidence": {
+              "confirmed_count": 1,
+              "normal_count": 0
+            }
+          }
+        ]
+      }
+    },
+    {
       "rule_id": "error_516db27d4d5f6f497beb",
       "source_subcategory": "공급중지",
       "pattern": {
@@ -17401,6 +17772,45 @@
             "scope": "source_subcategory_only",
             "strength": "exact",
             "raw_pattern": "납부확인",
+            "evidence": {
+              "confirmed_count": 1,
+              "normal_count": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "rule_id": "error_eeacd695b492e9513b5f",
+      "source_subcategory": "공급중지",
+      "pattern": {
+        "kind": "exact_normalized",
+        "value": "납부확인 안될경우 재중단하기 원",
+        "tokens": [
+          "납부확인",
+          "안될경우",
+          "재중단하기",
+          "원"
+        ]
+      },
+      "source": [
+        "error_pattern.json"
+      ],
+      "status": "active",
+      "scope": {
+        "source_subcategory": "공급중지",
+        "application": "source_subcategory_only"
+      },
+      "strength": "exact",
+      "decision": "auto_error",
+      "evidence": {
+        "origins": [
+          {
+            "source": "error_pattern.json",
+            "status": "active",
+            "scope": "source_subcategory_only",
+            "strength": "exact",
+            "raw_pattern": "납부확인 안될경우 재중단하기 원",
             "evidence": {
               "confirmed_count": 1,
               "normal_count": 0
@@ -26822,6 +27232,44 @@
       }
     },
     {
+      "rule_id": "error_fdec7a098c13a44068f1",
+      "source_subcategory": "서비스기타",
+      "pattern": {
+        "kind": "exact_normalized",
+        "value": "배관 표시 대전시중구청",
+        "tokens": [
+          "배관",
+          "표시",
+          "대전시중구청"
+        ]
+      },
+      "source": [
+        "error_pattern.json"
+      ],
+      "status": "active",
+      "scope": {
+        "source_subcategory": "서비스기타",
+        "application": "source_subcategory_only"
+      },
+      "strength": "exact",
+      "decision": "auto_error",
+      "evidence": {
+        "origins": [
+          {
+            "source": "error_pattern.json",
+            "status": "active",
+            "scope": "source_subcategory_only",
+            "strength": "exact",
+            "raw_pattern": "배관 표시 대전시중구청",
+            "evidence": {
+              "confirmed_count": 1,
+              "normal_count": 0
+            }
+          }
+        ]
+      }
+    },
+    {
       "rule_id": "error_7c65a217c2d074569b84",
       "source_subcategory": "서비스기타",
       "pattern": {
@@ -27184,6 +27632,47 @@
             "scope": "source_subcategory_only",
             "strength": "exact",
             "raw_pattern": "사무용도로 사용시 용도변경 및 보증증권 등록 필요 현금예치 만원",
+            "evidence": {
+              "confirmed_count": 1,
+              "normal_count": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "rule_id": "error_a4a66e2dc567f3bb6093",
+      "source_subcategory": "수납",
+      "pattern": {
+        "kind": "exact_normalized",
+        "value": "사무실오더 환불금 발생되면 자동이체계좌로 환불해주고 전화하기",
+        "tokens": [
+          "사무실오더",
+          "환불금",
+          "발생되면",
+          "자동이체계좌로",
+          "환불해주고",
+          "전화하기"
+        ]
+      },
+      "source": [
+        "error_pattern.json"
+      ],
+      "status": "active",
+      "scope": {
+        "source_subcategory": "수납",
+        "application": "source_subcategory_only"
+      },
+      "strength": "exact",
+      "decision": "auto_error",
+      "evidence": {
+        "origins": [
+          {
+            "source": "error_pattern.json",
+            "status": "active",
+            "scope": "source_subcategory_only",
+            "strength": "exact",
+            "raw_pattern": "사무실오더 환불금 발생되면 자동이체계좌로 환불해주고 전화하기",
             "evidence": {
               "confirmed_count": 1,
               "normal_count": 0
@@ -27573,6 +28062,48 @@
             "scope": "source_subcategory_only",
             "strength": "exact",
             "raw_pattern": "재연결 전산해지요청 공급 후 문자요청",
+            "evidence": {
+              "confirmed_count": 1,
+              "normal_count": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "rule_id": "error_303cad5e59f1e5b372f9",
+      "source_subcategory": "신규공급",
+      "pattern": {
+        "kind": "exact_normalized",
+        "value": "재연결완료 보일러밸브 본인이 잠금거 같아 열지 않음",
+        "tokens": [
+          "재연결완료",
+          "보일러밸브",
+          "본인이",
+          "잠금거",
+          "같아",
+          "열지",
+          "않음"
+        ]
+      },
+      "source": [
+        "error_pattern.json"
+      ],
+      "status": "active",
+      "scope": {
+        "source_subcategory": "신규공급",
+        "application": "source_subcategory_only"
+      },
+      "strength": "exact",
+      "decision": "auto_error",
+      "evidence": {
+        "origins": [
+          {
+            "source": "error_pattern.json",
+            "status": "active",
+            "scope": "source_subcategory_only",
+            "strength": "exact",
+            "raw_pattern": "재연결완료 보일러밸브 본인이 잠금거 같아 열지 않음",
             "evidence": {
               "confirmed_count": 1,
               "normal_count": 0
@@ -35012,6 +35543,46 @@
       }
     },
     {
+      "rule_id": "error_cec415fca99c3c53627c",
+      "source_subcategory": "연소기 연결/교체",
+      "pattern": {
+        "kind": "exact_normalized",
+        "value": "연소기추가 시공업체 문의 안내 피굽남",
+        "tokens": [
+          "연소기추가",
+          "시공업체",
+          "문의",
+          "안내",
+          "피굽남"
+        ]
+      },
+      "source": [
+        "error_pattern.json"
+      ],
+      "status": "active",
+      "scope": {
+        "source_subcategory": "연소기 연결/교체",
+        "application": "source_subcategory_only"
+      },
+      "strength": "exact",
+      "decision": "auto_error",
+      "evidence": {
+        "origins": [
+          {
+            "source": "error_pattern.json",
+            "status": "active",
+            "scope": "source_subcategory_only",
+            "strength": "exact",
+            "raw_pattern": "연소기추가 시공업체 문의 안내 피굽남",
+            "evidence": {
+              "confirmed_count": 1,
+              "normal_count": 0
+            }
+          }
+        ]
+      }
+    },
+    {
       "rule_id": "error_649145de8b6ac50ca7fc",
       "source_subcategory": "연소기 연결/교체",
       "pattern": {
@@ -36990,6 +37561,46 @@
       }
     },
     {
+      "rule_id": "error_c33b1fdaf2bdc5095d6e",
+      "source_subcategory": "요금",
+      "pattern": {
+        "kind": "exact_normalized",
+        "value": "재연결 최대한 빠른 공급 요청",
+        "tokens": [
+          "재연결",
+          "최대한",
+          "빠른",
+          "공급",
+          "요청"
+        ]
+      },
+      "source": [
+        "error_pattern.json"
+      ],
+      "status": "active",
+      "scope": {
+        "source_subcategory": "요금",
+        "application": "source_subcategory_only"
+      },
+      "strength": "exact",
+      "decision": "auto_error",
+      "evidence": {
+        "origins": [
+          {
+            "source": "error_pattern.json",
+            "status": "active",
+            "scope": "source_subcategory_only",
+            "strength": "exact",
+            "raw_pattern": "재연결 최대한 빠른 공급 요청",
+            "evidence": {
+              "confirmed_count": 1,
+              "normal_count": 0
+            }
+          }
+        ]
+      }
+    },
+    {
       "rule_id": "error_c7ea07d654a66b535980",
       "source_subcategory": "요금",
       "pattern": {
@@ -37149,6 +37760,42 @@
       }
     },
     {
+      "rule_id": "error_f75e2d862d7d3eec84a9",
+      "source_subcategory": "전입기타",
+      "pattern": {
+        "kind": "exact_normalized",
+        "value": "e",
+        "tokens": [
+          "e"
+        ]
+      },
+      "source": [
+        "error_pattern.json"
+      ],
+      "status": "active",
+      "scope": {
+        "source_subcategory": "전입기타",
+        "application": "source_subcategory_only"
+      },
+      "strength": "exact",
+      "decision": "auto_error",
+      "evidence": {
+        "origins": [
+          {
+            "source": "error_pattern.json",
+            "status": "active",
+            "scope": "source_subcategory_only",
+            "strength": "exact",
+            "raw_pattern": "e",
+            "evidence": {
+              "confirmed_count": 1,
+              "normal_count": 0
+            }
+          }
+        ]
+      }
+    },
+    {
       "rule_id": "error_7147768154dad05e80e5",
       "source_subcategory": "전입기타",
       "pattern": {
@@ -37177,7 +37824,7 @@
             "strength": "review",
             "raw_pattern": "f",
             "evidence": {
-              "confirmed_count": 2,
+              "confirmed_count": 5,
               "normal_count": 8
             }
           }
@@ -37606,6 +38253,50 @@
             "scope": "source_subcategory_only",
             "strength": "exact",
             "raw_pattern": "증권사용계약서 서울보증보험으로 팩스 넣음",
+            "evidence": {
+              "confirmed_count": 1,
+              "normal_count": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "rule_id": "error_b5ed10288c59af979eb4",
+      "source_subcategory": "전입기타",
+      "pattern": {
+        "kind": "exact_normalized",
+        "value": "체류자격 f 로 확인되어 현금예치 만원 입금완료 외국인 보증금",
+        "tokens": [
+          "체류자격",
+          "f",
+          "로",
+          "확인되어",
+          "현금예치",
+          "만원",
+          "입금완료",
+          "외국인",
+          "보증금"
+        ]
+      },
+      "source": [
+        "error_pattern.json"
+      ],
+      "status": "active",
+      "scope": {
+        "source_subcategory": "전입기타",
+        "application": "source_subcategory_only"
+      },
+      "strength": "exact",
+      "decision": "auto_error",
+      "evidence": {
+        "origins": [
+          {
+            "source": "error_pattern.json",
+            "status": "active",
+            "scope": "source_subcategory_only",
+            "strength": "exact",
+            "raw_pattern": "체류자격 f 로 확인되어 현금예치 만원 입금완료 외국인 보증금",
             "evidence": {
               "confirmed_count": 1,
               "normal_count": 0
@@ -40663,6 +41354,43 @@
       }
     },
     {
+      "rule_id": "error_8332cc547124d42b59bf",
+      "source_subcategory": "체납",
+      "pattern": {
+        "kind": "exact_normalized",
+        "value": "재연결 전산해지",
+        "tokens": [
+          "재연결",
+          "전산해지"
+        ]
+      },
+      "source": [
+        "error_pattern.json"
+      ],
+      "status": "active",
+      "scope": {
+        "source_subcategory": "체납",
+        "application": "source_subcategory_only"
+      },
+      "strength": "exact",
+      "decision": "auto_error",
+      "evidence": {
+        "origins": [
+          {
+            "source": "error_pattern.json",
+            "status": "active",
+            "scope": "source_subcategory_only",
+            "strength": "exact",
+            "raw_pattern": "재연결 전산해지",
+            "evidence": {
+              "confirmed_count": 1,
+              "normal_count": 0
+            }
+          }
+        ]
+      }
+    },
+    {
       "rule_id": "error_c6fb2c98d1239986e661",
       "source_subcategory": "체납",
       "pattern": {
@@ -41377,6 +42105,48 @@
             "scope": "source_subcategory_only",
             "strength": "exact",
             "raw_pattern": "체납재연결 납부완료 한선애",
+            "evidence": {
+              "confirmed_count": 1,
+              "normal_count": 0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "rule_id": "error_7996e5f0b00145d16a3a",
+      "source_subcategory": "체납",
+      "pattern": {
+        "kind": "exact_normalized",
+        "value": "혹서기 격월검침 문의 미검침시 추정으로 자동반영됨 안내",
+        "tokens": [
+          "혹서기",
+          "격월검침",
+          "문의",
+          "미검침시",
+          "추정으로",
+          "자동반영됨",
+          "안내"
+        ]
+      },
+      "source": [
+        "error_pattern.json"
+      ],
+      "status": "active",
+      "scope": {
+        "source_subcategory": "체납",
+        "application": "source_subcategory_only"
+      },
+      "strength": "exact",
+      "decision": "auto_error",
+      "evidence": {
+        "origins": [
+          {
+            "source": "error_pattern.json",
+            "status": "active",
+            "scope": "source_subcategory_only",
+            "strength": "exact",
+            "raw_pattern": "혹서기 격월검침 문의 미검침시 추정으로 자동반영됨 안내",
             "evidence": {
               "confirmed_count": 1,
               "normal_count": 0

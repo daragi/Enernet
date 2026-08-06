@@ -17,6 +17,7 @@ if str(CENTER_DIR) not in sys.path:
     sys.path.insert(0, str(CENTER_DIR))
 
 from service_order.error import analysis_pipeline  # noqa: E402
+from service_order.error import unified_rule_engine  # noqa: E402
 from service_order.service_order_store import DashboardStore  # noqa: E402
 
 
@@ -34,6 +35,46 @@ def order_frame(order_numbers: list[str]) -> pd.DataFrame:
 
 
 class ExactClassificationTest(TestCase):
+    def test_guarantee_insurance_alpha_digit_shape_rule(self) -> None:
+        source = order_frame(["guarantee", "wrong-owner"])
+        source["소분류"] = ["보증보험", "검침"]
+        source["내역"] = ["A-1 보증보험 안내", "A-1 보증보험 안내"]
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            normal_rules = root / "normal_rules.json"
+            error_rules = root / "error_rules.json"
+            normal_rules.write_text(
+                json.dumps(
+                    {
+                        "rules": [],
+                        "policies": {
+                            "shape_rule_alpha_digit": {
+                                "enabled": True,
+                                "pattern": "(?<![A-Za-z0-9])[A-Za-z]\\s*-\\s*\\d(?!\\d)",
+                                "normal_subcategory": "보증보험",
+                                "normal_decision": "normal",
+                                "other_subcategory_decision": "auto_error",
+                            }
+                        },
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            error_rules.write_text('{"rules": []}', encoding="utf-8")
+            with (
+                patch.object(unified_rule_engine, "NORMAL_RULES_PATH", normal_rules),
+                patch.object(unified_rule_engine, "ERROR_RULES_PATH", error_rules),
+            ):
+                candidates, auto_errors, summary = (
+                    unified_rule_engine.select_candidate_orders_unified(source)
+                )
+
+        self.assertTrue(candidates.empty)
+        self.assertEqual(auto_errors["오더번호"].tolist(), ["wrong-owner"])
+        self.assertEqual(summary["보증보험형식정상행수"], 1)
+        self.assertEqual(summary["보증보험형식자동오생성행수"], 1)
+
     def test_dominant_other_subcategory_phrase_keeps_anomaly_for_review(self) -> None:
         source = order_frame(["anomaly", "owner-normal"])
         source["소분류"] = ["공급중지", "체납"]
@@ -314,6 +355,91 @@ class ExactClassificationTest(TestCase):
         self.assertEqual(record["status"], "active")
         self.assertEqual(summary["new_active"], 1)
         self.assertEqual(summary["current_candidate_impact"], 1)
+
+    def test_verified_candidates_follow_normal_promotion_thresholds(self) -> None:
+        cases = [
+            {
+                "phrase": "stable phrase",
+                "support": 8,
+                "dates": 3,
+                "active": True,
+            },
+            {
+                "phrase": "pending phrase",
+                "support": 7,
+                "dates": 3,
+                "active": False,
+            },
+            {
+                "phrase": "stable normal phrase",
+                "support": 5,
+                "dates": 2,
+                "active": True,
+            },
+            {
+                "phrase": "pending normal phrase",
+                "support": 4,
+                "dates": 2,
+                "active": False,
+            },
+        ]
+        for case in cases:
+            with self.subTest(phrase=case["phrase"]), TemporaryDirectory() as directory:
+                support = int(case["support"])
+                source = order_frame([str(2000 + index) for index in range(support + 1)])
+                source["오더생성일"] = [
+                    pd.Timestamp(
+                        f"2026-07-{(index % int(case['dates'])) + 1:02d}"
+                    )
+                    for index in range(support + 1)
+                ]
+                source["생성인"] = [f"creator-{index % 2}" for index in range(support + 1)]
+                source["내역"] = [str(case["phrase"])] * support + ["approved error"]
+                verified = source.iloc[:support].copy()
+                no_pending_candidates = source.iloc[0:0].copy()
+                confirmed_error = source.iloc[[support]].copy()
+                registry = Path(directory) / "auto_normal_pattern.json"
+                with (
+                    patch.object(
+                        analysis_pipeline,
+                        "AUTO_NORMAL_PATTERN_PATH",
+                        registry,
+                    ),
+                    patch.object(
+                        analysis_pipeline,
+                        "ERROR_PATTERN_PATH",
+                        Path(directory) / "missing_error_pattern.json",
+                    ),
+                ):
+                    summary = analysis_pipeline.update_auto_normal_pattern_registry(
+                        source,
+                        no_pending_candidates,
+                        confirmed_error,
+                        {},
+                        verified_normal_candidates=verified,
+                    )
+                    document = json.loads(registry.read_text(encoding="utf-8"))
+
+                record = next(
+                    (
+                        item
+                        for item in document["records"]
+                        if item["pattern"] == case["phrase"]
+                    ),
+                    None,
+                )
+                if bool(case["active"]):
+                    self.assertIsNotNone(record)
+                    assert record is not None
+                    self.assertEqual(record["status"], "active")
+                    self.assertEqual(record["normal_support"], support)
+                    self.assertEqual(record["verified_normal_coverage"], support)
+                    self.assertEqual(summary["new_active"], 1)
+                else:
+                    self.assertTrue(
+                        record is None or record["status"] != "active"
+                    )
+                    self.assertEqual(summary["new_active"], 0)
 
     def test_repeated_owner_only_candidate_phrase_is_auto_promoted(self) -> None:
         source = order_frame([f"R{index}" for index in range(30)])

@@ -239,12 +239,12 @@
           <div class="direct-error-heading">
             <div>
               <h2 id="direct-error-title">원본 행으로 오생성 등록</h2>
-              <p>원본 Excel 행을 그대로 붙여 넣으세요. 업로드된 <b>오더번호</b>와 일치할 때 등록합니다.</p>
+              <p>원본 Excel의 <b>행 전체</b>를 붙여 넣으세요. 열 제목이 없어도 원본 열 순서를 인식해 현재 업로드 기간과 무관하게 검증합니다.</p>
             </div>
             <button class="direct-error-close" id="direct-error-close" type="button" aria-label="원본 행 등록 닫기">×</button>
           </div>
           <label class="direct-error-paste-label" for="direct-error-paste">Excel 행 붙여넣기</label>
-          <textarea id="direct-error-paste" class="direct-error-paste" rows="7" spellcheck="false" placeholder="오더번호&#9;소분류&#9;내역&#10;28812757&#9;검침&#9;…"></textarea>
+          <textarea id="direct-error-paste" class="direct-error-paste" rows="7" spellcheck="false" placeholder="원본 Excel에서 행 전체를 복사해 붙여 넣으세요. (열 제목 선택 사항)"></textarea>
           <div class="direct-error-preview" id="direct-error-preview" hidden aria-live="polite">
             <strong id="direct-error-preview-summary"></strong>
             <p id="direct-error-preview-message"></p>

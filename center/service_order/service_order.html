@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="서비스오더 오생성 현황 대시보드">
   <title>서비스오더 | enernet</title>
-  <link rel="stylesheet" href="../assets/service_order.css?v=20260731-1">
-  <script src="../assets/service_order.js?v=20260731-1" defer></script>
+  <link rel="stylesheet" href="../assets/service_order.css?v=20260806-4">
+  <script src="../assets/service_order.js?v=20260806-3" defer></script>
 </head>
 <body class="service-order-page">
   <div class="app-shell">
@@ -104,7 +104,7 @@
           </fieldset>
 
           <div class="filter-field person-filter" id="person-filter" hidden>
-            <label for="person-search">인원 검색</label>
+            <label for="person-search">이름 검색</label>
             <div class="search-control">
               <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6"/><path d="m15 15 5 5"/></svg>
               <input id="person-search" type="search" autocomplete="off" placeholder="이름을 입력하세요" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" aria-controls="person-options" aria-activedescendant="">
@@ -269,6 +269,7 @@
             <div class="view-tabs" id="trend-view-tabs" role="tablist" aria-label="오생성 추이 표현 방식">
               <button class="is-selected" type="button" role="tab" data-trend-view="line" aria-selected="true">시계열</button>
               <button type="button" role="tab" data-trend-view="stacked" aria-selected="false">누적 막대</button>
+              <button type="button" role="tab" data-trend-view="yearly-rate" aria-selected="false">연도별 비교</button>
             </div>
             <div class="chart-legend" id="chart-legend" aria-label="그래프 범례"></div>
           </div>
@@ -289,10 +290,11 @@
         <div class="insight-head">
           <div>
             <h2 id="insight-title">오생성 변화 분석</h2>
-            <p id="insight-caption">선택 월과 전월을 비교합니다.</p>
+            <p id="insight-caption">선택 기간과 전년 동기간을 비교합니다.</p>
           </div>
           <div class="view-tabs insight-view-tabs" id="insight-view-tabs" role="tablist" aria-label="변화 분석 화면 전환">
-            <button class="is-selected" type="button" role="tab" data-insight-view="change" aria-selected="true">전월 대비 오생성 증감</button>
+            <button type="button" role="tab" data-comparison-mode="previous_month" aria-selected="false">전월 대비</button>
+            <button class="is-selected" type="button" role="tab" data-comparison-mode="previous_year" aria-selected="true">전년 대비</button>
             <button type="button" role="tab" data-insight-view="pattern" aria-selected="false">반복 키워드</button>
           </div>
         </div>
@@ -334,11 +336,27 @@
             <div class="pattern-list-wrap">
               <div class="pattern-list-head">
                 <strong>반복 발생 패턴</strong>
-                <span>월별 발생 건수(2건 이상)</span>
+                <span>선택 기간 발생 건수(3건 이상)</span>
               </div>
               <ol class="pattern-list" id="pattern-list"></ol>
               <div class="pattern-empty" id="pattern-empty" hidden>선택한 기간에 반복 탐지된 패턴이 없습니다.</div>
             </div>
+          </div>
+        </div>
+
+        <div class="insight-view person-analysis-view" id="person-analysis-view" role="tabpanel" hidden>
+          <div class="person-analysis-summary" id="person-analysis-summary"></div>
+          <div class="person-analysis-grid">
+            <section class="person-subcategory-section">
+              <div class="person-analysis-head"><strong>소분류별 오생성 건</strong><span>건수순</span></div>
+              <ol class="person-analysis-list person-analysis-scroll" id="person-subcategory-list"></ol>
+              <p class="person-analysis-empty" id="person-subcategory-empty" hidden>해당 기간의 오생성이 없습니다.</p>
+            </section>
+            <section class="person-detail-section">
+              <div class="person-analysis-head"><strong>소분류 · 오생성 내역</strong><span>건수순 · 전체 보기</span></div>
+              <ol class="person-detail-list person-analysis-scroll" id="person-detail-list"></ol>
+              <p class="person-analysis-empty" id="person-detail-empty" hidden>표시할 확정 오생성 내역이 없습니다.</p>
+            </section>
           </div>
         </div>
       </section>
@@ -387,7 +405,7 @@
             </div>
           </div>
           <ol class="ranking-list" id="person-ranking"></ol>
-          <div class="ranking-empty" id="person-empty">표시할 인원 자료가 없습니다.</div>
+          <div class="ranking-empty" id="person-empty">표시할 자료가 없습니다.</div>
         </article>
       </section>
 

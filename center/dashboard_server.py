@@ -21,6 +21,7 @@ import re
 import shutil
 import sqlite3
 import uuid
+import zlib
 
 import pandas as pd
 import uvicorn
@@ -54,14 +55,17 @@ from service_order.service_order_store import (
     normalize_order_number,
 )
 from service_order.error.analysis_pipeline import (
+    PREPROCESSED_COLUMN_ORDER,
     find_date_columns,
     format_classified_orders,
     load_configuration,
+    preprocess_orders,
     run_analysis,
     SAP_ID_PATH,
     save_classification_workbook,
     save_formatted_excel,
     select_candidate_orders,
+    update_auto_normal_pattern_registry,
 )
 from service_order.error.tools.build_error_pattern_registry import (
     build_registry_from_paths,
@@ -97,10 +101,32 @@ HISTORICAL_EXCEPT_LIST_PATH = Path(
 )
 HISTORICAL_DATE_START = "2026-01-01"
 HISTORICAL_DATE_END = "2026-06-30"
+HISTORICAL_2025_TRUTH_PATH = Path(
+    os.environ.get(
+        "SERVICE_ORDER_HISTORICAL_2025_TRUTH_PATH",
+        r"\\DocuONE\MyDrive\개인함\0. 25년 서비스오더 사업부 오생성 모음.xlsx",
+    )
+)
+HISTORICAL_2025_SOURCE_PATHS: dict[int, Path] = {
+    1: Path(r"\\DocuONE\MyDrive\공유함\서비스지원팀\운영지원본부\01.VOC,서비스오더\2025년 서비스오더\2월\25년 1월 전체 서비스오더리스트.xlsx"),
+    2: Path(r"\\DocuONE\MyDrive\공유함\서비스지원팀\운영지원본부\01.VOC,서비스오더\2025년 서비스오더\2월\25년 2월 전체 서비스오더리스트.xlsx"),
+    3: Path(r"\\DocuONE\MyDrive\공유함\서비스지원팀\운영지원본부\01.VOC,서비스오더\2025년 서비스오더\4월\25년 3월 전체 서비스오더리스트.xlsx"),
+    4: Path(r"\\DocuONE\MyDrive\공유함\서비스지원팀\운영지원본부\01.VOC,서비스오더\2025년 서비스오더\4월\25년 4월 전체 서비스오더리스트.xlsx"),
+    5: Path(r"\\DocuONE\MyDrive\공유함\서비스지원팀\운영지원본부\01.VOC,서비스오더\2025년 서비스오더\6월\25년 5월 전체 서비스오더 리스트.xlsx"),
+    6: Path(r"\\DocuONE\MyDrive\공유함\서비스지원팀\운영지원본부\01.VOC,서비스오더\2025년 서비스오더\6월\25년 6월 전체 서비스오더 리스트.xlsx"),
+    7: Path(r"\\DocuONE\MyDrive\공유함\서비스지원팀\운영지원본부\01.VOC,서비스오더\2025년 서비스오더\8월\25년 7월 전체 서비스오더 리스트 (version 1).xlsx"),
+    8: Path(r"\\DocuONE\MyDrive\공유함\서비스지원팀\운영지원본부\01.VOC,서비스오더\2025년 서비스오더\8월\25년 8월 전체 서비스오더 리스트 (version 1).xlsx"),
+    9: Path(r"\\DocuONE\MyDrive\공유함\서비스지원팀\운영지원본부\01.VOC,서비스오더\2025년 서비스오더\10월\25년 9월 전체 서비스오더 리스트.xlsx"),
+    10: Path(r"\\DocuONE\MyDrive\공유함\서비스지원팀\운영지원본부\01.VOC,서비스오더\2025년 서비스오더\10월\25년 10월 전체 서비스오더 리스트.xlsx"),
+    11: Path(r"\\DocuONE\MyDrive\공유함\서비스지원팀\운영지원본부\01.VOC,서비스오더\2025년 서비스오더\12월\25년 11월 전체 서비스오더 리스트.xlsx"),
+    12: Path(r"\\DocuONE\MyDrive\공유함\서비스지원팀\운영지원본부\01.VOC,서비스오더\2025년 서비스오더\12월\25년 12월 전체 서비스오더 리스트.xlsx"),
+}
+HISTORICAL_2025_DATE_START = "2025-01-01"
+HISTORICAL_2025_DATE_END = "2025-12-31"
 HISTORICAL_IMPORT_STATE_PATH = (
     SERVICE_ORDER_DIR / "data" / "historical_import_state.json"
 )
-HISTORICAL_IMPORT_VERSION = 3
+HISTORICAL_IMPORT_VERSION = 4
 MAX_UPLOAD_BYTES = 150 * 1024 * 1024
 MAX_DIRECT_ERROR_ROWS = 500
 DIRECT_ERROR_ROW_ID_OFFSET = 1_000_000_000
@@ -215,6 +241,8 @@ def historical_source_signature() -> dict[str, object]:
     paths.extend(
         [HISTORICAL_TRUTH_PATH, HISTORICAL_EXCEPT_LIST_PATH, SAP_ID_PATH]
     )
+    paths.extend(HISTORICAL_2025_SOURCE_PATHS.values())
+    paths.append(HISTORICAL_2025_TRUTH_PATH)
     files: list[dict[str, object]] = []
     for path in paths:
         stat = path.stat()
@@ -236,10 +264,7 @@ def cached_historical_result() -> dict[str, object] | None:
             HISTORICAL_IMPORT_STATE_PATH.read_text(encoding="utf-8")
         )
         state_version = int(state.get("version", 0) or 0)
-        if state_version not in {
-            HISTORICAL_IMPORT_VERSION,
-            HISTORICAL_IMPORT_VERSION - 1,
-        }:
+        if state_version != HISTORICAL_IMPORT_VERSION:
             return None
         stored = DASHBOARD_STORE.period_status(
             HISTORICAL_DATE_START,
@@ -250,6 +275,20 @@ def cached_historical_result() -> dict[str, object] | None:
             result.get("stored"), dict
         ):
             return None
+        periods = result.get("periods")
+        if not isinstance(periods, dict):
+            return None
+        for year, start_date, end_date in (
+            ("2025", HISTORICAL_2025_DATE_START, HISTORICAL_2025_DATE_END),
+            ("2026", HISTORICAL_DATE_START, HISTORICAL_DATE_END),
+        ):
+            expected = periods.get(year, {}).get("stored")
+            actual = DASHBOARD_STORE.period_status(start_date, end_date)
+            if not isinstance(expected, dict) or any(
+                int(actual[key]) != int(expected.get(key, -1))
+                for key in ("total_count", "error_count")
+            ):
+                return None
         if int(stored["total_count"]) != int(
             result["stored"].get("total_count", -1)
         ):
@@ -297,6 +336,45 @@ def cached_historical_result() -> dict[str, object] | None:
         return None
 
 
+def legacy_2026_historical_result() -> tuple[dict[str, object], dict[str, object], pd.DataFrame] | None:
+    """Reuse validated v3 2026 aggregates during the one-time 2025 migration."""
+    if not HISTORICAL_IMPORT_STATE_PATH.is_file():
+        return None
+    try:
+        state = json.loads(HISTORICAL_IMPORT_STATE_PATH.read_text(encoding="utf-8"))
+        if int(state.get("version", 0) or 0) != HISTORICAL_IMPORT_VERSION - 1:
+            return None
+        result = state.get("result")
+        if not isinstance(result, dict):
+            return None
+        stored = result.get("stored")
+        summary = result.get("summary")
+        if not isinstance(stored, dict) or not isinstance(summary, dict):
+            return None
+        actual = DASHBOARD_STORE.period_status(
+            HISTORICAL_DATE_START, HISTORICAL_DATE_END
+        )
+        if any(
+            int(actual[key]) != int(stored.get(key, -1))
+            for key in ("total_count", "error_count")
+        ):
+            return None
+        stored_files = state.get("signature", {}).get("files")
+        current_files = historical_source_signature().get("files", [])
+        if not isinstance(stored_files, list) or current_files[: len(stored_files)] != stored_files:
+            return None
+        details = load_historical_error_details(
+            HISTORICAL_TRUTH_PATH,
+            HISTORICAL_EXCEPT_LIST_PATH,
+            months=range(1, 7),
+        )
+        if len(details) != int(stored["error_count"]):
+            return None
+        return summary, stored, details
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        return None
+
+
 def save_historical_import_state(result: dict[str, object]) -> None:
     HISTORICAL_IMPORT_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
     payload = {
@@ -319,28 +397,68 @@ def load_and_store_historical_metrics() -> dict[str, object]:
     if cached is not None:
         return cached
     sap_id_map, _ = load_configuration()
-    loaded = load_historical_aggregates(
+    legacy_2026 = legacy_2026_historical_result()
+    if legacy_2026 is None:
+        loaded_2026 = load_historical_aggregates(
+            HISTORICAL_SOURCE_DIR,
+            HISTORICAL_TRUTH_PATH,
+            HISTORICAL_EXCEPT_LIST_PATH,
+            months=range(1, 7),
+            blank_row_limit=200,
+            sap_id_map=sap_id_map,
+        )
+        summary_2026 = asdict(loaded_2026.summary)
+        stored_2026 = None
+        details_2026 = loaded_2026.error_details
+    else:
+        summary_2026, stored_2026, details_2026 = legacy_2026
+    # 2025 originals are read only to create dashboard aggregates.  They are
+    # deliberately excluded from every keyword and error-rule learning path.
+    loaded_2025 = load_historical_aggregates(
         HISTORICAL_SOURCE_DIR,
-        HISTORICAL_TRUTH_PATH,
+        HISTORICAL_2025_TRUTH_PATH,
         HISTORICAL_EXCEPT_LIST_PATH,
-        months=range(1, 7),
+        months=range(1, 13),
         blank_row_limit=200,
         sap_id_map=sap_id_map,
+        source_paths=HISTORICAL_2025_SOURCE_PATHS,
+    )
+    combined_details = pd.concat(
+        [loaded_2025.error_details, details_2026],
+        ignore_index=True,
+        sort=False,
     )
     historical_details = DASHBOARD_STORE.replace_historical_error_details(
-        loaded.error_details,
-        source_name=HISTORICAL_TRUTH_PATH.name,
+        combined_details,
+        source_name="2025-2026 historical confirmed errors",
     )
-    stored = DASHBOARD_STORE.replace_aggregate_period(
-        loaded.aggregates,
-        date_start=HISTORICAL_DATE_START,
-        date_end=HISTORICAL_DATE_END,
+    stored_2025 = DASHBOARD_STORE.replace_aggregate_period(
+        loaded_2025.aggregates,
+        date_start=HISTORICAL_2025_DATE_START,
+        date_end=HISTORICAL_2025_DATE_END,
     )
+    if stored_2026 is None:
+        stored_2026 = DASHBOARD_STORE.replace_aggregate_period(
+            loaded_2026.aggregates,
+            date_start=HISTORICAL_DATE_START,
+            date_end=HISTORICAL_DATE_END,
+        )
     result = {
-        "truth_file": HISTORICAL_TRUTH_PATH.name,
-        "source": "monthly_original_xlsx",
-        "summary": asdict(loaded.summary),
-        "stored": stored,
+        "source": "aggregate_only_monthly_original_xlsx",
+        "periods": {
+            "2025": {
+                "truth_file": HISTORICAL_2025_TRUTH_PATH.name,
+                "summary": asdict(loaded_2025.summary),
+                "stored": stored_2025,
+            },
+            "2026": {
+                "truth_file": HISTORICAL_TRUTH_PATH.name,
+                "summary": summary_2026,
+                "stored": stored_2026,
+            },
+        },
+        # Retain this compatibility summary for the existing startup event.
+        "stored": stored_2026,
         "historical_details": historical_details,
     }
     save_historical_import_state(result)
@@ -582,6 +700,217 @@ def parse_direct_error_order_numbers(
     return order_numbers, duplicates
 
 
+DIRECT_ERROR_SOURCE_REQUIRED_HEADERS = {
+    "오더번호",
+    "오더생성일",
+    "오더생성자",
+    "상태",
+    "소분류",
+    "내역",
+}
+DIRECT_ERROR_SOURCE_CENTER_HEADERS = {"고객서비스처리센터", "서비스처리센터"}
+BUSINESS_CENTER_BY_NAME = {
+    "중부": "H071",
+    "북부": "H072",
+    "남부": "H073",
+    "동부": "H074",
+    "서부": "H075",
+}
+
+
+def _complete_direct_error_source_columns(frame: pd.DataFrame) -> pd.DataFrame | None:
+    """Supply a center from business only for a complete pasted source row."""
+    data = frame.copy()
+    data.columns = data.columns.astype(str).str.strip()
+    header_keys = {_direct_error_header_key(value) for value in data.columns if value}
+    required_keys = {
+        _direct_error_header_key(value) for value in DIRECT_ERROR_SOURCE_REQUIRED_HEADERS
+    }
+    center_keys = {
+        _direct_error_header_key(value) for value in DIRECT_ERROR_SOURCE_CENTER_HEADERS
+    }
+    if not required_keys.issubset(header_keys):
+        return None
+    if not header_keys.intersection(center_keys):
+        if "사업부" not in data.columns:
+            return None
+        data["서비스처리센터"] = (
+            data["사업부"].astype("string").str.strip().map(BUSINESS_CENTER_BY_NAME)
+        )
+    return data
+
+
+def infer_direct_error_source_rows(rows: list[list[str]]) -> pd.DataFrame | None:
+    """Infer common Amaranth row-only exports without a copied header.
+
+    Some exports place the service center after household/customer columns and
+    include an extra detail-code column.  Looking up the semantic anchors is
+    safer than assuming the displayed column order is the preprocessed order.
+    """
+    inferred: list[dict[str, object]] = []
+    for raw_row in rows:
+        row = [str(value).strip() for value in raw_row]
+        center_index = next(
+            (
+                index
+                for index, value in enumerate(row)
+                if re.fullmatch(r"H0(?:5[1-5]|7[1-5])", value.upper())
+            ),
+            None,
+        )
+        order_index = next(
+            (
+                index
+                for index, value in enumerate(row[:-4])
+                if re.fullmatch(r"\d{7,10}", normalize_order_number(value))
+                and row[index + 1]
+                and not re.fullmatch(r"\d+(?:\.\d+)?", row[index + 1])
+            ),
+            None,
+        )
+        creator_index = next(
+            (
+                index
+                for index, value in enumerate(row)
+                if re.fullmatch(r"CSC\d{4,}", value.upper())
+                and index >= 2
+                and index + 3 < len(row)
+            ),
+            None,
+        )
+        if (
+            center_index is None
+            or order_index is None
+            or creator_index is None
+            or order_index + 4 >= len(row)
+        ):
+            return None
+
+        detail_end = center_index if center_index > order_index else creator_index
+        detail_values = [
+            value
+            for value in row[order_index + 5 : detail_end]
+            if value and not re.fullmatch(r"\d+(?:\.\d+)?", value)
+        ]
+        # A raw row may contain a short detail code followed by the real text.
+        # Keep both in order so no operational meaning is discarded.
+        detail = " ".join(detail_values)
+        if not detail:
+            return None
+
+        created_date = row[creator_index - 2]
+        created_time = row[creator_index - 1]
+        if pd.isna(pd.to_datetime(created_date, errors="coerce")):
+            return None
+        inferred.append(
+            {
+                "서비스처리센터": row[center_index].upper(),
+                "오더번호": normalize_order_number(row[order_index]),
+                "상태": row[order_index + 1],
+                "대분류": row[order_index + 2],
+                "중분류": row[order_index + 3],
+                "소분류": row[order_index + 4],
+                "내역": detail,
+                "오더생성일": created_date,
+                "오더생성시간": created_time,
+                "오더생성자": row[creator_index].upper(),
+                "생성인": row[creator_index + 1],
+                "생성부서": row[creator_index + 2],
+                "사업부": row[creator_index + 3],
+            }
+        )
+    return _complete_direct_error_source_columns(pd.DataFrame(inferred))
+
+
+def parse_direct_error_source_frame(pasted_text: str) -> pd.DataFrame | None:
+    """Return pasted original rows when their header can be preprocessed.
+
+    Compact pastes (for example order number/subcategory/detail only) retain
+    the legacy current-upload lookup.  A complete original-row paste is
+    deliberately handled from its own values, so it is not tied to the
+    currently displayed upload period.
+    """
+    if not isinstance(pasted_text, str) or not pasted_text.strip():
+        raise ValueError("Excel에서 복사한 행을 붙여 넣어 주세요.")
+    if len(pasted_text) > 1_000_000:
+        raise ValueError(
+            f"붙여넣기 내용이 너무 큽니다. 한 번에 {MAX_DIRECT_ERROR_ROWS:,}행까지 등록할 수 있습니다."
+        )
+
+    rows = [
+        row
+        for row in csv.reader(StringIO(pasted_text), delimiter="\t")
+        if any(str(cell).strip() for cell in row)
+    ]
+    order_aliases = {"오더번호", "오더no", "order_number"}
+    header_index = next(
+        (
+            index
+            for index, row in enumerate(rows[:5])
+            if any(_direct_error_header_key(cell) in order_aliases for cell in row)
+        ),
+        None,
+    )
+    if header_index is None:
+        embedded_center = any(
+            re.fullmatch(r"H0(?:5[1-5]|7[1-5])", str(value).strip().upper())
+            for row in rows
+            for value in row[1:]
+        )
+        if embedded_center:
+            inferred = infer_direct_error_source_rows(rows)
+            if inferred is not None:
+                return inferred
+        # Excel also permits copying only a full data row, without the header.
+        # The service-order export has a fixed column order.  Its first field
+        # is sometimes omitted by the source export, so accept both layouts.
+        full_columns = list(PREPROCESSED_COLUMN_ORDER)
+        no_center_columns = [
+            column for column in full_columns if column != "서비스처리센터"
+        ]
+        maximum_width = max((len(row) for row in rows), default=0)
+        if maximum_width not in {len(full_columns), len(no_center_columns)}:
+            return None
+        columns = (
+            full_columns
+            if maximum_width == len(full_columns)
+            else no_center_columns
+        )
+        positional_records = [
+            {
+                column: row[index].strip() if index < len(row) else ""
+                for index, column in enumerate(columns)
+            }
+            for row in rows
+        ]
+        positional = _complete_direct_error_source_columns(
+            pd.DataFrame(positional_records, columns=columns)
+        )
+        if positional is not None:
+            return positional
+        return infer_direct_error_source_rows(rows)
+
+    header = [str(value).strip().lstrip("\ufeff") for value in rows[header_index]]
+    valid_columns = [index for index, value in enumerate(header) if value]
+    if len({header[index] for index in valid_columns}) != len(valid_columns):
+        raise ValueError("붙여넣은 원본 행의 열 제목이 중복되어 있습니다.")
+    values: list[dict[str, object]] = []
+    for row in rows[header_index + 1 :]:
+        record = {
+            header[index]: row[index].strip() if index < len(row) else ""
+            for index in valid_columns
+        }
+        if any(str(value).strip() for value in record.values()):
+            values.append(record)
+    if not values:
+        raise ValueError("열 제목 아래에 등록할 원본 행이 없습니다.")
+    if len(values) > MAX_DIRECT_ERROR_ROWS:
+        raise ValueError(
+            f"한 번에 최대 {MAX_DIRECT_ERROR_ROWS:,}행까지 직접 등록할 수 있습니다."
+        )
+    return _complete_direct_error_source_columns(pd.DataFrame(values))
+
+
 def apply_error_exclusions(
     preprocessed: pd.DataFrame,
     candidates: pd.DataFrame,
@@ -723,6 +1052,20 @@ class CurrentJob:
     candidate_file: str
 
 
+@dataclass
+class ReviewedCandidateLearning:
+    """Snapshot of a reviewed upload waiting to become normal evidence."""
+
+    job_id: str
+    source_name: str
+    period: dict[str, str | None]
+    preprocessed: pd.DataFrame
+    confirmed_errors: pd.DataFrame
+    remaining_candidates: pd.DataFrame
+    remaining_candidate_count: int
+    manual_approved_count: int
+
+
 class CurrentJobManager:
     """Keeps the latest row-level job in memory and restores its XLSX snapshot."""
 
@@ -849,6 +1192,34 @@ class CurrentJobManager:
         with self._lock:
             self._job = prepared
             return self._job
+
+    def reviewed_candidate_learning(self) -> ReviewedCandidateLearning | None:
+        """Return the current upload after at least one human error approval.
+
+        Unconfirmed candidates are not activated as normal rules immediately.
+        The next successful, non-overlapping upload closes this review and uses
+        the remaining rows as aggregate normal evidence.
+        """
+        with self._lock:
+            job = self._job
+            if job is None or job.candidates.empty:
+                return None
+            manual_orders = DASHBOARD_STORE.active_error_order_numbers(
+                batch_type="manual"
+            )
+            approved_orders = manual_orders & job.reviewable_order_numbers
+            if not approved_orders:
+                return None
+            return ReviewedCandidateLearning(
+                job_id=job.job_id,
+                source_name=job.source_name,
+                period=deepcopy(job.period),
+                preprocessed=job.preprocessed.copy(deep=True),
+                confirmed_errors=job.confirmed_errors.copy(deep=True),
+                remaining_candidates=job.candidates.copy(deep=True),
+                remaining_candidate_count=len(job.candidates),
+                manual_approved_count=len(approved_orders),
+            )
 
     def status(self) -> dict[str, object] | None:
         with self._lock:
@@ -1225,34 +1596,82 @@ class CurrentJobManager:
             )
             return result
 
+    def _resolve_direct_error_source_rows(
+        self,
+        job: CurrentJob,
+        pasted_text: str,
+    ) -> tuple[pd.DataFrame, dict[str, int], list[str], list[str], list[str], str]:
+        """Resolve a full original-row paste or retain the compact legacy paste."""
+        pasted_source = parse_direct_error_source_frame(pasted_text)
+        if pasted_source is not None:
+            sap_id_map, except_keys = load_configuration()
+            source_frame, _ = preprocess_orders(
+                pasted_source,
+                sap_id_map,
+                except_keys,
+            )
+            order_numbers = [
+                normalize_order_number(value)
+                for value in source_frame.get("오더번호", pd.Series(dtype="object"))
+                if normalize_order_number(value)
+            ]
+            seen_orders: set[str] = set()
+            duplicates = []
+            for order_number in order_numbers:
+                if order_number in seen_orders and order_number not in duplicates:
+                    duplicates.append(order_number)
+                seen_orders.add(order_number)
+            source_kind = "pasted_original"
+        else:
+            source_frame = job.preprocessed
+            order_numbers, duplicates = parse_direct_error_order_numbers(
+                pasted_text,
+                {
+                    normalize_order_number(value)
+                    for value in source_frame.get("오더번호", pd.Series(dtype="object"))
+                    if normalize_order_number(value)
+                },
+            )
+            source_kind = "current_upload_lookup"
+
+        if "오더번호" not in source_frame.columns:
+            raise KeyError("전처리된 원본에 오더번호 열이 없습니다.")
+        source_index: dict[str, int] = {}
+        for row_id, value in enumerate(source_frame["오더번호"]):
+            order_number = normalize_order_number(value)
+            if order_number and order_number not in source_index:
+                source_index[order_number] = row_id
+        missing_orders = [
+            order_number for order_number in order_numbers if order_number not in source_index
+        ]
+        return (
+            source_frame,
+            source_index,
+            order_numbers,
+            duplicates,
+            missing_orders,
+            source_kind,
+        )
+
     def preview_direct_error_rows(
         self,
         job_id: str | None,
         pasted_text: str,
     ) -> dict[str, object]:
-        """Resolve pasted source rows against the active upload by order number."""
+        """Preview a full original-row paste or a compact current-row paste."""
         with self._lock:
             job = self._require_job(job_id)
-            if "오더번호" not in job.preprocessed.columns:
-                raise KeyError("현재 전처리 데이터에 오더번호 열이 없습니다.")
-
-            source_index: dict[str, int] = {}
-            for row_id, value in enumerate(job.preprocessed["오더번호"]):
-                order_number = normalize_order_number(value)
-                if order_number and order_number not in source_index:
-                    source_index[order_number] = row_id
-            order_numbers, input_duplicates = parse_direct_error_order_numbers(
-                pasted_text,
-                set(source_index),
-            )
+            (
+                source_frame,
+                source_index,
+                order_numbers,
+                input_duplicates,
+                missing_orders,
+                source_kind,
+            ) = self._resolve_direct_error_source_rows(job, pasted_text)
 
             active_orders = DASHBOARD_STORE.active_error_order_numbers()
             excluded_orders = DASHBOARD_STORE.excluded_error_order_numbers()
-            missing_orders = [
-                order_number
-                for order_number in order_numbers
-                if order_number not in source_index
-            ]
             already_confirmed = [
                 order_number
                 for order_number in order_numbers
@@ -1265,12 +1684,17 @@ class CurrentJobManager:
             ]
 
             rows: list[dict[str, object]] = []
+            missing_state = (
+                "전처리 기준에서 제외됨"
+                if source_kind == "pasted_original"
+                else "현재 업로드에서 찾지 못함"
+            )
             for order_number in order_numbers[:30]:
                 source_row_id = source_index.get(order_number)
                 if source_row_id is None:
-                    rows.append({"오더번호": order_number, "상태": "현재 업로드에서 찾지 못함"})
+                    rows.append({"오더번호": order_number, "상태": missing_state})
                     continue
-                row = job.preprocessed.iloc[source_row_id]
+                row = source_frame.iloc[source_row_id]
                 if order_number in active_orders:
                     state = "이미 오생성"
                 elif order_number in excluded_orders:
@@ -1304,6 +1728,7 @@ class CurrentJobManager:
                 "already_confirmed_order_numbers": already_confirmed,
                 "excluded_order_numbers": restore_orders,
                 "duplicate_order_numbers": input_duplicates,
+                "source_kind": source_kind,
                 "rows": rows,
             }
 
@@ -1335,19 +1760,18 @@ class CurrentJobManager:
                     + ", ".join(already_confirmed[:10])
                 )
 
-            source_index: dict[str, int] = {}
-            for row_id, value in enumerate(job.preprocessed["오더번호"]):
-                order_number = normalize_order_number(value)
-                if order_number and order_number not in source_index:
-                    source_index[order_number] = row_id
-            order_numbers, _ = parse_direct_error_order_numbers(
-                pasted_text,
-                set(source_index),
-            )
+            (
+                source_frame,
+                source_index,
+                order_numbers,
+                _,
+                _,
+                source_kind,
+            ) = self._resolve_direct_error_source_rows(job, pasted_text)
             records: list[dict[str, object]] = []
             for order_number in order_numbers:
                 source_row_id = source_index[order_number]
-                row = job.preprocessed.iloc[source_row_id]
+                row = source_frame.iloc[source_row_id]
                 order_date = pd.to_datetime(
                     row.get("오더생성일"), errors="coerce"
                 )
@@ -1365,7 +1789,7 @@ class CurrentJobManager:
                         # Candidate row IDs share a job-local namespace. Keep
                         # direct FN registrations safely outside that range.
                         "candidate_row_id": DIRECT_ERROR_ROW_ID_OFFSET
-                        + source_row_id,
+                        + (zlib.crc32(order_number.encode("utf-8")) & 0x3FFFFFFF),
                         "order_number": order_number,
                         "order_date": order_date.date().isoformat(),
                         "person": clean_dimension(row.get("생성인")),
@@ -1409,7 +1833,11 @@ class CurrentJobManager:
                     result = DASHBOARD_STORE.approve_error_batch(
                         batch_id=uuid.uuid4().hex[:16],
                         job_id=job.job_id,
-                        source_name=f"{job.source_name} · 원본 행 직접 등록",
+                        source_name=(
+                            "붙여넣은 원본 행 직접 등록"
+                            if source_kind == "pasted_original"
+                            else f"{job.source_name} · 원본 행 직접 등록"
+                        ),
                         approved_at=approved_at,
                         records=new_records,
                     )
@@ -2120,6 +2548,87 @@ def promote_current_job_results(
     return promotion
 
 
+def periods_overlap(
+    left: dict[str, str | None],
+    right: dict[str, str | None],
+) -> bool:
+    """Treat incomplete periods as overlapping so they are never auto-learned."""
+    try:
+        left_start = date.fromisoformat(str(left.get("start") or ""))
+        left_end = date.fromisoformat(str(left.get("end") or ""))
+        right_start = date.fromisoformat(str(right.get("start") or ""))
+        right_end = date.fromisoformat(str(right.get("end") or ""))
+    except ValueError:
+        return True
+    return left_start <= right_end and right_start <= left_end
+
+
+def finalize_reviewed_candidate_learning(
+    reviewed: ReviewedCandidateLearning,
+    current: CurrentJob,
+) -> dict[str, object]:
+    """Learn a prior upload's unconfirmed candidates without storing raw rows.
+
+    The consolidated normal registry keeps date-range aggregates. The current
+    upload is written once more after the reviewed snapshot so its later period
+    remains authoritative and the learning cutoff cannot move backwards.
+    """
+    if periods_overlap(reviewed.period, current.period):
+        return {
+            "state": "skipped_overlap",
+            "reviewed_job_id": reviewed.job_id,
+            "remaining_candidate_count": reviewed.remaining_candidate_count,
+            "manual_approved_count": reviewed.manual_approved_count,
+        }
+
+    sap_id_map, _ = load_configuration()
+    no_pending_candidates = reviewed.preprocessed.iloc[0:0].copy()
+    with PATTERN_REGISTRY_LOCK:
+        error_summary = refresh_error_rules_registry()
+        reviewed_summary = update_auto_normal_pattern_registry(
+            reviewed.preprocessed,
+            no_pending_candidates,
+            reviewed.confirmed_errors,
+            sap_id_map,
+            verified_normal_candidates=reviewed.remaining_candidates,
+        )
+        current_summary = update_auto_normal_pattern_registry(
+            current.preprocessed,
+            current.candidates,
+            current.confirmed_errors,
+            sap_id_map,
+        )
+
+    current.candidate_summary.update(
+        {
+            "자동정상활성패턴수": int(current_summary["active_total"]),
+            "자동정상추천패턴수": int(current_summary["proposed_total"]),
+            "자동정상신규활성수": int(current_summary["new_active"]),
+            "자동정상비활성전환수": int(current_summary["demoted"]),
+            "자동정상당회후보감소추정": int(
+                current_summary["current_candidate_impact"]
+            ),
+            "자동정상누적기간수": int(
+                current_summary["evidence_snapshot_total"]
+            ),
+            "자동정상누적증거패턴수": int(
+                current_summary["evidence_pattern_total"]
+            ),
+        }
+    )
+    return {
+        "state": "applied",
+        "reviewed_job_id": reviewed.job_id,
+        "reviewed_source_name": reviewed.source_name,
+        "remaining_candidate_count": reviewed.remaining_candidate_count,
+        "manual_approved_count": reviewed.manual_approved_count,
+        "new_active": int(reviewed_summary["new_active"]),
+        "active_total": int(current_summary["active_total"]),
+        "proposed_total": int(current_summary["proposed_total"]),
+        "error_rule_count": int(error_summary.get("rule_count", 0) or 0),
+    }
+
+
 class CheckUpdate(BaseModel):
     row_id: int = Field(ge=0)
     checked: bool
@@ -2175,7 +2684,7 @@ async def lifespan(_: FastAPI):
     set_historical_status(
         "loading",
         started_at=started_at,
-        message="1~6월 전체 데이터와 확정 오생성을 집계하고 있습니다.",
+        message="2025~2026년 전체 데이터와 확정 오생성을 집계하고 있습니다.",
     )
 
     async def refresh_historical_data() -> None:
@@ -2208,12 +2717,12 @@ async def lifespan(_: FastAPI):
                 started_at=started_at,
                 finished_at=finished_at,
                 result=historical_result,
-                message="1~6월 과거 데이터 연동을 완료했습니다.",
+                message="2025~2026년 과거 데이터 연동을 완료했습니다.",
             )
             stored = historical_result["stored"]
             EVENTS.publish(
                 "historical_data_ready",
-                "1~6월 서비스오더 과거 데이터를 반영했습니다.",
+                "2025~2026년 서비스오더 과거 데이터를 반영했습니다.",
                 {
                     "total_count": stored["total_count"],
                     "error_count": stored["error_count"],
@@ -2482,6 +2991,7 @@ async def analyze(
         )
 
     job_id = uuid.uuid4().hex[:12]
+    reviewed_candidate_learning = CURRENT_JOB.reviewed_candidate_learning()
     upload_dir = TEMP_UPLOAD_ROOT / job_id
     output_dir = upload_dir / "result"
     upload_path = upload_dir / "source.xlsx"
@@ -2630,7 +3140,38 @@ async def analyze(
         prepared_job.candidate_summary[
             "관리자제외오생성행수"
         ] = excluded_error_count
+        classification_summary: dict[str, object] | None = None
+        reviewed_normal_learning: dict[str, object] = {
+            "state": "not_applicable"
+        }
+        if reviewed_candidate_learning is not None:
+            try:
+                reviewed_normal_learning = await run_in_threadpool(
+                    finalize_reviewed_candidate_learning,
+                    reviewed_candidate_learning,
+                    prepared_job,
+                )
+            except Exception as error:
+                reviewed_normal_learning = {
+                    "state": "error",
+                    "reviewed_job_id": reviewed_candidate_learning.job_id,
+                    "message": str(error),
+                }
+                LOGGER.exception(
+                    "Failed to learn reviewed normal candidates from job %s",
+                    reviewed_candidate_learning.job_id,
+                )
         CURRENT_JOB.install(prepared_job)
+        if reviewed_normal_learning.get("state") == "applied":
+            try:
+                classification_summary = await run_in_threadpool(
+                    CURRENT_JOB.refresh_classification,
+                    job_id,
+                )
+            except Exception:
+                LOGGER.exception(
+                    "Reviewed normal rules were saved but current-job refresh failed"
+                )
         try:
             await run_in_threadpool(finalize_current_job_promotion, promotion)
         except Exception:
@@ -2638,19 +3179,18 @@ async def analyze(
             # backup is outside WEB_OUTPUT_ROOT and is cleared with upload_dir.
             LOGGER.exception("Failed to discard previous analysis backups")
 
-        # Uploads are intentionally inference-only.  Feeding an automatic
-        # classification back into the registry would reinforce its own
-        # mistakes.  Human approval/exclusion/rollback endpoints rebuild the
-        # registry, then reclassify the current job immediately.
+        # Automatic error classifications are never fed back as human truth.
+        # Only prior candidates left unconfirmed after at least one manual
+        # approval become normal evidence when a later upload succeeds.
         set_analysis_progress(
             analysis_id,
             98,
             "누적된 오생성 학습 규칙의 적용 결과를 확인하고 있습니다.",
         )
-        classification_summary: dict[str, object] | None = None
         error_learning: dict[str, object] = {
             "state": "applied",
             "training_trigger": "manual_approval",
+            "reviewed_normal_learning": reviewed_normal_learning,
         }
 
         set_analysis_progress(analysis_id, 99, "최종 분석 결과를 확인하고 있습니다.")
@@ -3192,6 +3732,7 @@ def dashboard_overview(
     month: int | None = Query(None, ge=1, le=12),
     start: str | None = None,
     end: str | None = None,
+    comparison_mode: Literal["previous_month", "previous_year"] = "previous_year",
     limit: int = Query(10, ge=1, le=100),
 ) -> dict[str, object]:
     try:
@@ -3204,6 +3745,7 @@ def dashboard_overview(
             month=month,
             start=start,
             end=end,
+            comparison_mode=comparison_mode,
             limit=limit,
         )
     except ValueError as error:

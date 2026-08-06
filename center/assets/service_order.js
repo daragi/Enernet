@@ -22,6 +22,8 @@
     timeMode: "year",
     year: now.getFullYear(),
     month: "",
+    comparisonMode: "previous_year",
+    initialFilterDefaultsApplied: false,
     start: "",
     end: "",
     business: "",
@@ -151,10 +153,17 @@
     businessOverviewList: document.querySelector("#business-overview-list"),
     businessOverviewEmpty: document.querySelector("#business-overview-empty"),
     businessOverviewPeriod: document.querySelector("#business-overview-period"),
+    insightTitle: document.querySelector("#insight-title"),
     insightCaption: document.querySelector("#insight-caption"),
     insightViewTabs: document.querySelector("#insight-view-tabs"),
     changeView: document.querySelector("#change-view"),
     patternView: document.querySelector("#pattern-view"),
+    personAnalysisView: document.querySelector("#person-analysis-view"),
+    personAnalysisSummary: document.querySelector("#person-analysis-summary"),
+    personSubcategoryList: document.querySelector("#person-subcategory-list"),
+    personSubcategoryEmpty: document.querySelector("#person-subcategory-empty"),
+    personDetailList: document.querySelector("#person-detail-list"),
+    personDetailEmpty: document.querySelector("#person-detail-empty"),
     causeSwitch: document.querySelector("#cause-switch"),
     comparisonChartWrap: document.querySelector("#comparison-chart-wrap"),
     comparisonChart: document.querySelector("#comparison-chart"),
@@ -194,6 +203,8 @@
       context: {},
       summary: { total: null, errors: null, rate: null },
       series: [],
+      yearlyRate: [],
+      personAnalysis: null,
       rankings: {
         subcategory: { count: [], rate: [] },
         person: { count: [], rate: [] },
@@ -201,6 +212,7 @@
       newErrors: { count: 0, asOfDate: "", sinceDate: "", lastUpdated: "", downloadUrl: "" },
       comparison: {
         available: false,
+        mode: "previous_year",
         summary: { total: 0, errors: 0, rate: 0, deltaTotal: 0, deltaCount: 0, deltaRate: 0 },
         rateBaseline: { center: null, lower: null, upper: null },
         causes: { business: [], subcategory: [], person: [] },
@@ -284,6 +296,7 @@
   function formatFullDate(value) {
     if (!value) return "–";
     const text = String(value);
+    if (/^\d{4}$/.test(text)) return `${text}년`;
     const match = text.match(/^(\d{4})[-./](\d{1,2})(?:[-./](\d{1,2}))?/);
     if (match) {
       const month = String(Number(match[2])).padStart(2, "0");
@@ -369,7 +382,14 @@
     state.people = filters.people;
     state.years = filters.years;
     state.dateBounds = filters.dateBounds;
-    if (filters.defaultYear && state.years.includes(filters.defaultYear)) state.year = filters.defaultYear;
+    if (!state.initialFilterDefaultsApplied) {
+      if (filters.defaultYear && state.years.includes(filters.defaultYear)) state.year = filters.defaultYear;
+      if (filters.defaultMonth) {
+        state.month = String(filters.defaultMonth);
+        state.timeMode = "month";
+      }
+      state.initialFilterDefaultsApplied = true;
+    }
 
     elements.businessSelect.replaceChildren();
     const allOption = document.createElement("option");
@@ -541,6 +561,7 @@
     const causes = source.causes || {};
     return {
       available: Boolean(source.available),
+      mode: String(firstDefined(source, ["mode", "comparison_mode"], "previous_year")),
       currentPeriod: source.current_period || source.currentPeriod || {},
       previousPeriod: source.previous_period || source.previousPeriod || {},
       summary: {
@@ -607,6 +628,49 @@
     };
   }
 
+  function normalizeYearlyRate(payload) {
+    const source = payload?.trend?.yearly_rate || payload?.trend?.yearlyRate || [];
+    return asArray(source).map((item) => {
+      const total = asNumber(firstDefined(item || {}, ["total_count", "total"], 0)) ?? 0;
+      const errors = asNumber(firstDefined(item || {}, ["error_count", "errors", "count"], 0)) ?? 0;
+      const rate = asNumber(firstDefined(item || {}, ["error_rate", "rate"], total ? errors / total * 100 : 0)) ?? 0;
+      return { date: String(firstDefined(item || {}, ["date", "year", "label"], "")), total, errors, rate };
+    }).filter((item) => item.date);
+  }
+
+  function normalizePersonAnalysis(payload) {
+    const source = payload?.person_analysis || payload?.personAnalysis || null;
+    if (!source) return null;
+    const comparison = source.comparison || {};
+    return {
+      comparison: {
+        available: Boolean(comparison.available),
+        mode: String(comparison.mode || "previous_year"),
+        currentCount: asNumber(comparison.current_count) ?? 0,
+        previousCount: asNumber(comparison.previous_count) ?? 0,
+        deltaCount: asNumber(comparison.delta_count) ?? 0,
+      },
+      businessBenchmark: (() => {
+        const benchmark = source.business_benchmark || source.businessBenchmark || null;
+        if (!benchmark || !benchmark.available) return null;
+        return {
+          business: String(benchmark.business || "사업부"),
+          businessErrors: asNumber(benchmark.business_error_count) ?? 0,
+          businessPeople: asNumber(benchmark.business_person_count) ?? 0,
+          personErrors: asNumber(benchmark.person_error_count) ?? 0,
+          rank: asNumber(benchmark.rank),
+          share: asNumber(benchmark.person_share) ?? 0,
+        };
+      })(),
+      subcategories: asArray(source.subcategories).map((item) => normalizeRankingItem(item, "subcategory")),
+      details: asArray(source.details).map((item) => ({
+        subcategory: String(item?.subcategory || "미분류"),
+        detail: String(item?.detail || "내역 미확인"),
+        count: asNumber(item?.count) ?? 0,
+      })),
+    };
+  }
+
   function normalizeOverview(payload) {
     const summary = payload?.summary || payload?.metrics || payload?.overview || {};
     const errors = asNumber(firstDefined(summary, ["error_count", "errors", "candidate_count", "confirmed_count", "오생성건수"], null));
@@ -624,6 +688,8 @@
       context,
       summary: { total, errors, rate },
       series: normalizeTrend(payload || {}, context),
+      yearlyRate: normalizeYearlyRate(payload || {}),
+      personAnalysis: normalizePersonAnalysis(payload || {}),
       rankings: {
         subcategory: normalizeRankingGroup(payload || {}, "subcategory"),
         person: normalizeRankingGroup(payload || {}, "person"),
@@ -701,6 +767,7 @@
     if (selectedBusiness) params.set("business", selectedBusiness);
     if (state.timeMode === "year" || state.timeMode === "month") params.set("year", String(state.year));
     if (state.timeMode === "month") params.set("month", String(state.month));
+    params.set("comparison_mode", state.comparisonMode);
     if (state.timeMode === "range") {
       params.set("start", state.start);
       params.set("end", state.end);
@@ -1432,17 +1499,165 @@
     });
   }
 
+  function renderPersonAnalysis() {
+    const analysis = state.overview.personAnalysis;
+    if (!elements.personAnalysisView || !elements.personAnalysisSummary) return;
+    elements.personAnalysisSummary.replaceChildren();
+    const benchmark = analysis?.businessBenchmark;
+    const comparison = analysis?.comparison;
+    elements.personAnalysisSummary.hidden = !analysis;
+    if (analysis) {
+      const currentErrors = asNumber(comparison?.currentCount) ?? asNumber(state.overview.summary.errors) ?? 0;
+      const previousErrors = comparison?.available ? (asNumber(comparison.previousCount) ?? 0) : null;
+      const delta = comparison?.available ? (asNumber(comparison.deltaCount) ?? 0) : null;
+      const maximumComparison = Math.max(currentErrors, previousErrors ?? 0, 1);
+      const items = [
+        {
+          label: "오생성 건수",
+          value: formatCount(currentErrors),
+          meta: benchmark ? `${benchmark.business} ${formatCount(benchmark.businessErrors)} 중` : "선택 기간 확정 건",
+          type: "share",
+          ratio: benchmark ? benchmark.share : 100,
+        },
+        {
+          label: "사업부 내 순위",
+          value: benchmark?.rank ? `${benchmark.rank}위` : "–",
+          meta: benchmark?.businessPeople ? `${benchmark.businessPeople}명 기준` : "비교 인원 없음",
+          type: "rank",
+          rank: benchmark?.rank ?? null,
+        },
+        {
+          label: "사업부 기여도",
+          value: benchmark ? formatRate(benchmark.share) : "–",
+          meta: benchmark ? `${benchmark.business} 전체 오생성 중` : "사업부 자료 없음",
+          type: "share",
+          ratio: benchmark?.share ?? 0,
+        },
+        {
+          label: "전년 동기간 대비",
+          value: delta === null ? "비교 없음" : formatSignedCount(delta),
+          meta: previousErrors === null ? "전년 자료 없음" : `전년 ${formatCount(previousErrors)} · 현재 ${formatCount(currentErrors)}`,
+          type: "comparison",
+          previousRatio: previousErrors === null ? 0 : previousErrors / maximumComparison * 100,
+          currentRatio: currentErrors / maximumComparison * 100,
+          tone: delta > 0 ? "is-positive" : delta < 0 ? "is-negative" : "is-neutral",
+        },
+      ];
+      items.forEach((config) => {
+        const item = document.createElement("article");
+        item.className = `person-kpi ${config.tone || ""}`.trim();
+        const label = document.createElement("span");
+        label.className = "person-kpi-label";
+        label.textContent = config.label;
+        const value = document.createElement("strong");
+        value.className = "person-kpi-value";
+        value.textContent = config.value;
+        const meta = document.createElement("small");
+        meta.className = "person-kpi-meta";
+        meta.textContent = config.meta;
+        const visual = document.createElement("span");
+        visual.className = `person-kpi-visual is-${config.type}`;
+        if (config.type === "rank") {
+          const badge = document.createElement("i");
+          badge.textContent = config.rank ? `#${config.rank}` : "–";
+          visual.append(badge);
+        } else if (config.type === "comparison") {
+          const previous = document.createElement("i");
+          previous.className = "is-previous";
+          previous.style.width = `${Math.max(3, config.previousRatio)}%`;
+          const current = document.createElement("i");
+          current.className = "is-current";
+          current.style.width = `${Math.max(3, config.currentRatio)}%`;
+          visual.append(previous, current);
+        } else {
+          const fill = document.createElement("i");
+          fill.style.width = `${Math.max(3, Math.min(100, config.ratio))}%`;
+          visual.append(fill);
+        }
+        item.append(label, value, meta, visual);
+        elements.personAnalysisSummary.append(item);
+      });
+    }
+
+    const categories = [...asArray(analysis?.subcategories)].sort((left, right) => (
+      (right.count - left.count) || (right.rate - left.rate) || left.label.localeCompare(right.label, "ko")
+    ));
+    const categoryMaximum = Math.max(...categories.map((item) => item.count), 1);
+    elements.personSubcategoryList?.replaceChildren();
+    categories.forEach((item) => {
+      const row = document.createElement("li");
+      const rowHead = document.createElement("div");
+      rowHead.className = "person-category-row";
+      const categoryLabel = document.createElement("span");
+      categoryLabel.className = "person-category-label";
+      categoryLabel.textContent = item.label;
+      const count = document.createElement("strong");
+      count.textContent = formatCount(item.count);
+      rowHead.append(categoryLabel, count);
+      const track = document.createElement("span");
+      track.className = "person-category-track";
+      const bar = document.createElement("i");
+      bar.style.width = `${Math.max(7, item.count / categoryMaximum * 100)}%`;
+      track.append(bar);
+      row.append(rowHead, track);
+      elements.personSubcategoryList?.append(row);
+    });
+    if (elements.personSubcategoryEmpty) elements.personSubcategoryEmpty.hidden = categories.length > 0;
+
+    const details = [...asArray(analysis?.details)].sort((left, right) => (
+      (right.count - left.count)
+      || left.subcategory.localeCompare(right.subcategory, "ko")
+      || left.detail.localeCompare(right.detail, "ko")
+    ));
+    elements.personDetailList?.replaceChildren();
+    details.forEach((item) => {
+      const row = document.createElement("li");
+      const category = document.createElement("span");
+      category.className = "person-detail-category";
+      category.textContent = item.subcategory;
+      const detailText = document.createElement("span");
+      detailText.className = "person-detail-text";
+      detailText.textContent = item.detail;
+      detailText.title = item.detail;
+      const count = document.createElement("strong");
+      count.textContent = formatCount(item.count);
+      row.append(category, detailText, count);
+      elements.personDetailList?.append(row);
+    });
+    if (elements.personDetailEmpty) elements.personDetailEmpty.hidden = details.length > 0;
+  }
+
   function renderInsightView() {
+    const isPersonScope = state.scope === "person" && Boolean(state.person);
+    if (elements.personAnalysisView) elements.personAnalysisView.hidden = !isPersonScope;
+    if (isPersonScope) {
+      elements.changeView.hidden = true;
+      elements.patternView.hidden = true;
+      elements.insightViewTabs.hidden = true;
+      if (elements.insightTitle) elements.insightTitle.textContent = "인원 분석";
+      elements.insightCaption.textContent = `${state.person.name}님의 소분류별 오생성과 확정 내역입니다.`;
+      renderPersonAnalysis();
+      return;
+    }
+    elements.insightViewTabs.hidden = false;
+    if (elements.insightTitle) elements.insightTitle.textContent = "오생성 변화 분석";
     const isChange = state.insightView === "change";
     elements.changeView.hidden = !isChange;
     elements.patternView.hidden = isChange;
     elements.insightCaption.textContent = isChange
       ? (state.overview.comparison.available
         ? `${compactPeriod(state.overview.comparison.currentPeriod)}와 ${compactPeriod(state.overview.comparison.previousPeriod)} 동기간 비교`
-        : "선택 월과 전월의 오생성을 비교합니다.")
+        : state.comparisonMode === "previous_year"
+          ? "선택 기간과 전년 동기간의 오생성을 비교합니다."
+          : "선택 기간과 전월 동기간의 오생성을 비교합니다.")
       : "반복 탐지와 신규 오생성의 구성을 확인합니다.";
     elements.insightViewTabs.querySelectorAll("button[data-insight-view]").forEach((button) => {
       const selected = button.dataset.insightView === state.insightView;
+      button.classList.toggle("is-selected", selected);
+      button.setAttribute("aria-selected", String(selected));
+    });
+    elements.insightViewTabs.querySelectorAll("button[data-comparison-mode]").forEach((button) => {
+      const selected = isChange && button.dataset.comparisonMode === state.comparisonMode;
       button.classList.toggle("is-selected", selected);
       button.setAttribute("aria-selected", String(selected));
     });
@@ -1532,8 +1747,8 @@
     series.textContent = seriesName;
     const values = document.createElement("span");
     values.className = "tooltip-values";
-    const tooltipRows = point.isTotal
-      ? [["오생성", formatCount(point.count)]]
+    const tooltipRows = point.isAnnualRate
+      ? [["오생성률", formatRate(point.rate)], ["오생성", formatCount(point.errorCount)], ["전체 데이터", formatCount(point.total)]]
       : [["오생성", formatCount(point.count)], ["오생성률", formatRate(point.rate)], ["전체 데이터", formatCount(point.total)]];
     tooltipRows.forEach(([label, value]) => {
       const labelElement = document.createElement("span");
@@ -1589,7 +1804,22 @@
       button.classList.toggle("is-selected", selected);
       button.setAttribute("aria-selected", String(selected));
     });
-    const validSeries = asArray(series)
+    const isYearlyRateView = state.trendView === "yearly-rate";
+    const sourceSeries = isYearlyRateView
+      ? [{
+        name: "연도별 오생성률",
+        points: asArray(state.overview.yearlyRate).map((point) => ({
+          date: point.date,
+          label: `${point.date}년`,
+          count: point.rate,
+          errorCount: point.errors,
+          total: point.total,
+          rate: point.rate,
+          isAnnualRate: true,
+        })),
+      }]
+      : asArray(series);
+    const validSeries = sourceSeries
       .map((item) => ({ ...item, points: asArray(item.points).filter(pointIsInSelectedPeriod) }))
       .filter((item) => item.points.length);
     const categories = [];
@@ -1614,7 +1844,12 @@
         label: category.label,
         count,
         total,
-        rate: total ? count / total * 100 : 0,
+        errorCount: isYearlyRateView ? validSeries.reduce((sum, item) => {
+          const point = item.points.find((candidate) => String(candidate.date || candidate.label) === category.key);
+          return sum + (asNumber(point?.errorCount) ?? 0);
+        }, 0) : count,
+        rate: isYearlyRateView ? count : (total ? count / total * 100 : 0),
+        isAnnualRate: isYearlyRateView,
       };
     });
     const hasData = aggregatePoints.length > 0;
@@ -1622,10 +1857,12 @@
     elements.chart.hidden = !hasData;
     if (!hasData) return;
 
-    const aggregateLabel = subjectLabel().name;
-    const isMultiBusiness = state.scope === "business" && !state.business && validSeries.length > 1;
-    const isStackedView = state.trendView === "stacked";
-    elements.trendDescription.textContent = `${periodLabel().replace(" · ", " ")} ${isStackedView ? "누적 막대" : "시계열"} 추이`;
+    const aggregateLabel = isYearlyRateView ? "연도별 오생성률" : subjectLabel().name;
+    const isMultiBusiness = !isYearlyRateView && state.scope === "business" && !state.business && validSeries.length > 1;
+    const isStackedView = !isYearlyRateView && state.trendView === "stacked";
+    elements.trendDescription.textContent = isYearlyRateView
+      ? "연도별 오생성률 비교"
+      : `${periodLabel().replace(" · ", " ")} ${isStackedView ? "누적 막대" : "시계열"} 추이`;
     const aggregateColor = state.scope === "business" && state.business
       ? seriesColor(validSeries[0]?.name || state.business)
       : "#1e3a62";
@@ -1651,7 +1888,10 @@
     const height = 340;
     const plotWidth = width - margins.left - margins.right;
     const plotHeight = height - margins.top - margins.bottom;
-    const maxY = niceMaximum(Math.max(...aggregatePoints.map((point) => point.count)));
+    const maximumValue = Math.max(...aggregatePoints.map((point) => point.count));
+    const maxY = isYearlyRateView
+      ? Math.max(0.2, Math.ceil(maximumValue / 0.05) * 0.05)
+      : niceMaximum(maximumValue);
     const slotWidth = plotWidth / Math.max(1, categories.length);
     const xFor = (index) => margins.left + slotWidth * index + slotWidth / 2;
     const yFor = (value) => margins.top + plotHeight - Math.max(0, value) / maxY * plotHeight;
@@ -1671,12 +1911,14 @@
         y: y + 4,
         "text-anchor": "end",
         class: "chart-axis-text",
-      }, numberFormatter.format(Math.round(value))));
+      }, isYearlyRateView ? `${value.toFixed(value < 1 ? 2 : 1)}%` : numberFormatter.format(Math.round(value))));
     }
 
     const maximumLabels = window.innerWidth < 620 ? 6 : 12;
     const labelStep = Math.max(1, Math.ceil(categories.length / maximumLabels));
+    const hideTerminalRangeLabel = state.timeMode === "range" && categories.length > maximumLabels;
     categories.forEach((category, index) => {
+      if (hideTerminalRangeLabel && index === categories.length - 1) return;
       if (index % labelStep !== 0 && index !== categories.length - 1) return;
       elements.chart.append(createSvgElement("text", {
         x: xFor(index),
@@ -1685,6 +1927,64 @@
         class: "chart-axis-text",
       }, category.label));
     });
+
+    if (isYearlyRateView) {
+      const defs = createSvgElement("defs");
+      const gradient = createSvgElement("linearGradient", {
+        id: "yearly-rate-area-gradient",
+        x1: "0",
+        y1: "0",
+        x2: "0",
+        y2: "1",
+      });
+      gradient.append(
+        createSvgElement("stop", { offset: "0%", "stop-color": "#d53d4e", "stop-opacity": "0.19" }),
+        createSvgElement("stop", { offset: "100%", "stop-color": "#d53d4e", "stop-opacity": "0.015" })
+      );
+      defs.append(gradient);
+      elements.chart.append(defs);
+
+      const baselineY = yFor(0);
+      const coordinates = aggregatePoints.map((point, index) => [xFor(index), yFor(point.count)]);
+      const line = coordinates.map(([x, y], index) => `${index ? "L" : "M"}${x} ${y}`).join(" ");
+      const area = [
+        `M${coordinates[0][0]} ${baselineY}`,
+        ...coordinates.map(([x, y]) => `L${x} ${y}`),
+        `L${coordinates[coordinates.length - 1][0]} ${baselineY}`,
+        "Z",
+      ].join(" ");
+      elements.chart.append(createSvgElement("path", { d: area, class: "chart-yearly-rate-area" }));
+      elements.chart.append(createSvgElement("path", { d: line, class: "chart-rate-line" }));
+      aggregatePoints.forEach((point, index) => {
+        const x = xFor(index);
+        const y = yFor(point.count);
+        const hit = createSvgElement("circle", {
+          cx: x,
+          cy: y,
+          r: 10,
+          class: "chart-point-hit",
+          tabindex: "0",
+          role: "button",
+          "aria-label": `${point.label}, 오생성률 ${formatRate(point.rate)}, 오생성 ${formatCount(point.errorCount)}`,
+        });
+        hit.addEventListener("mouseenter", (event) => showChartTooltip(point, aggregateLabel, event));
+        hit.addEventListener("mousemove", (event) => showChartTooltip(point, aggregateLabel, event));
+        hit.addEventListener("mouseleave", hideChartTooltip);
+        hit.addEventListener("focus", () => showChartTooltip(point, aggregateLabel, {
+          x: x / width * elements.chart.getBoundingClientRect().width,
+          y: y / height * elements.chart.getBoundingClientRect().height,
+        }));
+        hit.addEventListener("blur", hideChartTooltip);
+        elements.chart.append(hit);
+        elements.chart.append(createSvgElement("circle", {
+          cx: x,
+          cy: y,
+          r: 4.4,
+          class: "chart-rate-point",
+        }));
+      });
+      return;
+    }
 
     if (isMultiBusiness && !isStackedView) {
       const defs = createSvgElement("defs");
@@ -1854,7 +2154,9 @@
         class: `chart-count-bar${point.count === 0 ? " is-zero" : ""}`,
         tabindex: "0",
         role: "button",
-        "aria-label": `${point.label}, 오생성 ${formatCount(point.count)}, 오생성률 ${formatRate(point.rate)}`,
+        "aria-label": point.isAnnualRate
+          ? `${point.label}, 오생성률 ${formatRate(point.rate)}, 오생성 ${formatCount(point.errorCount)}`
+          : `${point.label}, 오생성 ${formatCount(point.count)}, 오생성률 ${formatRate(point.rate)}`,
         style: `fill:${aggregateColor};animation-delay:${index * 22}ms`,
       });
       bar.addEventListener("mouseenter", (event) => showChartTooltip(point, aggregateLabel, event));
@@ -1864,6 +2166,22 @@
       bar.addEventListener("blur", hideChartTooltip);
       elements.chart.append(bar);
     });
+  }
+
+  function personFromRanking(item) {
+    const name = String(item?.label || "").trim();
+    const business = String(item?.business || state.business || "").trim();
+    if (!name) return null;
+    return state.people.find((person) => person.name === name && (!business || person.business === business))
+      || state.people.find((person) => person.name === name)
+      || { id: `ranking:${business}:${name}`, name, business };
+  }
+
+  function selectRankedPerson(item) {
+    const person = personFromRanking(item);
+    if (!person) return;
+    state.scope = "person";
+    selectPerson(person);
   }
 
   function renderRanking(type) {
@@ -1886,7 +2204,17 @@
       const row = document.createElement("li");
       row.className = "ranking-row";
       if (index < 3) row.classList.add(`is-top-${index + 1}`);
-      row.tabIndex = 0;
+      if (type === "person") {
+        row.classList.add("is-person-ranking");
+        row.tabIndex = 0;
+        row.setAttribute("role", "button");
+        row.addEventListener("click", () => selectRankedPerson(item));
+        row.addEventListener("keydown", (event) => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.preventDefault();
+          selectRankedPerson(item);
+        });
+      }
 
       const rank = document.createElement("span");
       rank.className = "ranking-number";
@@ -1937,6 +2265,9 @@
   }
 
   function updateScopeUi() {
+    const isPersonAnalysis = state.scope === "person" && Boolean(state.person);
+    document.querySelector(".service-order-page")?.classList.toggle("is-person-scope", isPersonAnalysis);
+    elements.scopeControl.closest(".scope-field").hidden = isPersonAnalysis;
     elements.scopeControl.querySelectorAll("button").forEach((button) => {
       const buttonScope = button.dataset.scope === "division" ? "business" : button.dataset.scope;
       const selected = buttonScope === state.scope;
@@ -1944,7 +2275,7 @@
       button.setAttribute("aria-pressed", String(selected));
     });
     elements.personFilter.hidden = state.scope !== "person";
-    elements.businessFilter.hidden = state.scope !== "business";
+    elements.businessFilter.hidden = state.scope !== "business" || isPersonAnalysis;
   }
 
   function updatePeriodUi() {
@@ -2028,9 +2359,11 @@
 
   function selectPerson(person) {
     state.person = person;
+    state.comparisonMode = "previous_year";
     elements.personSearch.value = person.name;
     elements.clearPerson.hidden = false;
     closePersonOptions();
+    updateScopeUi();
     loadOverview();
   }
 
@@ -2039,6 +2372,7 @@
     elements.personSearch.value = "";
     elements.clearPerson.hidden = true;
     closePersonOptions();
+    updateScopeUi();
     clearOverview();
     updateFilterSummary();
     elements.personSearch.focus();
@@ -2061,9 +2395,10 @@
 
   function resetAllFilters() {
     state.scope = "business";
-    state.timeMode = "year";
-    state.year = state.years.includes(now.getFullYear()) ? now.getFullYear() : state.years[0];
-    state.month = "";
+    const latest = String(state.dateBounds.end || "").match(/^(\d{4})-(\d{2})-/);
+    state.year = latest ? Number(latest[1]) : (state.years.includes(now.getFullYear()) ? now.getFullYear() : state.years[0]);
+    state.month = latest ? String(Number(latest[2])) : "";
+    state.timeMode = state.month ? "month" : "year";
     state.start = "";
     state.end = "";
     state.business = "";
@@ -2206,6 +2541,15 @@
       startBriefingRotation();
     });
     elements.insightViewTabs?.addEventListener("click", (event) => {
+      const comparisonButton = event.target.closest("button[data-comparison-mode]");
+      if (comparisonButton) {
+        state.comparisonMode = comparisonButton.dataset.comparisonMode === "previous_year"
+          ? "previous_year"
+          : "previous_month";
+        state.insightView = "change";
+        loadOverview();
+        return;
+      }
       const button = event.target.closest("button[data-insight-view]");
       if (!button) return;
       state.insightView = button.dataset.insightView;
@@ -2214,7 +2558,9 @@
     elements.trendViewTabs?.addEventListener("click", (event) => {
       const button = event.target.closest("button[data-trend-view]");
       if (!button) return;
-      state.trendView = button.dataset.trendView === "stacked" ? "stacked" : "line";
+      state.trendView = ["line", "stacked", "yearly-rate"].includes(button.dataset.trendView)
+        ? button.dataset.trendView
+        : "line";
       renderChart(state.overview.series);
     });
     elements.causeSwitch?.addEventListener("click", (event) => {
@@ -2260,6 +2606,7 @@
       if (state.person && elements.personSearch.value !== state.person.name) {
         state.person = null;
         elements.clearPerson.hidden = true;
+        updateScopeUi();
         clearOverview();
       }
       renderPersonOptions(elements.personSearch.value);

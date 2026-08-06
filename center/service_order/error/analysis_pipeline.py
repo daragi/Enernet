@@ -1657,6 +1657,8 @@ def update_auto_normal_pattern_registry(
     candidates: pd.DataFrame,
     auto_errors: pd.DataFrame,
     sap_id_map: dict[str, str],
+    *,
+    verified_normal_candidates: pd.DataFrame | None = None,
 ) -> dict[str, object]:
     """Accumulate aggregate normal evidence without retaining uploaded rows.
 
@@ -1703,8 +1705,16 @@ def update_auto_normal_pattern_registry(
 
     candidate_keys = _order_number_keys(candidates)
     auto_error_keys = _order_number_keys(auto_errors)
+    verified_normal_keys = _order_number_keys(
+        verified_normal_candidates
+        if isinstance(verified_normal_candidates, pd.DataFrame)
+        else preprocessed.iloc[0:0]
+    )
     frame["classification"] = "normal"
     frame.loc[frame["order_key"].isin(candidate_keys), "classification"] = "candidate"
+    frame.loc[
+        frame["order_key"].isin(verified_normal_keys), "classification"
+    ] = "normal"
     frame.loc[frame["order_key"].isin(auto_error_keys), "classification"] = "error"
 
     total_by_pattern: dict[tuple[str, ...], dict[str, int]] = defaultdict(
@@ -1712,6 +1722,9 @@ def update_auto_normal_pattern_registry(
     )
     normal_count: defaultdict[tuple[str, tuple[str, ...]], int] = defaultdict(int)
     candidate_rows: dict[tuple[str, tuple[str, ...]], set[str]] = defaultdict(set)
+    verified_normal_rows: dict[
+        tuple[str, tuple[str, ...]], set[str]
+    ] = defaultdict(set)
     normal_dates: dict[tuple[str, tuple[str, ...]], set[str]] = defaultdict(set)
     normal_people: dict[tuple[str, tuple[str, ...]], set[str]] = defaultdict(set)
 
@@ -1753,6 +1766,8 @@ def update_auto_normal_pattern_registry(
                 person = str(getattr(row, "person_key"))
                 if person:
                     normal_people[key].add(person)
+                if order_key in verified_normal_keys:
+                    verified_normal_rows[key].add(order_key)
             elif classification == "candidate":
                 candidate_rows[key].add(order_key)
 
@@ -1816,6 +1831,9 @@ def update_auto_normal_pattern_registry(
                 "pattern": " ".join(pattern),
                 "normal_support": int(support),
                 "candidate_coverage": len(candidate_rows.get(key, set())),
+                "verified_normal_coverage": len(
+                    verified_normal_rows.get(key, set())
+                ),
                 "other_subcategory_frequency": int(other_count),
                 "distinct_normal_dates": len(normal_dates.get(key, set()) - {"<NA>"}),
                 "distinct_normal_people": len(normal_people.get(key, set())),
@@ -1872,6 +1890,9 @@ def update_auto_normal_pattern_registry(
             values = cumulative[key]
             values["normal_support"] += int(evidence.get("normal_support") or 0)
             values["candidate_coverage"] += int(evidence.get("candidate_coverage") or 0)
+            values["verified_normal_coverage"] += int(
+                evidence.get("verified_normal_coverage") or 0
+            )
             values["other_subcategory_frequency"] += int(
                 evidence.get("other_subcategory_frequency") or 0
             )
@@ -1936,8 +1957,10 @@ def update_auto_normal_pattern_registry(
             values["normal_support"] >= normal_support_threshold
             and values["distinct_normal_dates"] >= normal_date_threshold
             and values["distinct_normal_people"] >= normal_people_threshold
-            and bool(rows)
-            and len(rows) <= 3
+            and (
+                (bool(rows) and len(rows) <= 3)
+                or values["verified_normal_coverage"] > 0
+            )
         )
         repeated_candidate_promotion = (
             values["normal_support"] >= 20
@@ -1990,6 +2013,9 @@ def update_auto_normal_pattern_registry(
                 "status": status,
                 "normal_support": int(support),
                 "candidate_coverage": int(values.get("candidate_coverage", 0)),
+                "verified_normal_coverage": int(
+                    values.get("verified_normal_coverage", 0)
+                ),
                 "current_candidate_coverage": len(rows),
                 "other_subcategory_frequency": int(other_count),
                 "distinct_normal_dates": int(values.get("distinct_normal_dates", 0)),

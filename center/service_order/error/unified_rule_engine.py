@@ -102,6 +102,33 @@ _GENERIC_CONTEXT_PATTERNS = frozenset(
 )
 
 
+def _shape_rule_decision(
+    raw_detail: object,
+    owner: str,
+    normal_document: dict[str, object],
+) -> str:
+    """Apply a configured high-confidence shape rule before text matching."""
+    policies = normal_document.get("policies") or {}
+    if not isinstance(policies, dict):
+        return ""
+    rule = policies.get("shape_rule_alpha_digit") or {}
+    if not isinstance(rule, dict) or not _bool(rule.get("enabled")):
+        return ""
+    pattern = str(rule.get("pattern") or "").strip()
+    if not pattern:
+        return ""
+    try:
+        matched = re.search(pattern, "" if pd.isna(raw_detail) else str(raw_detail))
+    except re.error:
+        return ""
+    if not matched:
+        return ""
+    normal_owner = str(rule.get("normal_subcategory") or "").strip()
+    if owner == normal_owner:
+        return str(rule.get("normal_decision") or "normal").strip().casefold()
+    return str(rule.get("other_subcategory_decision") or "auto_error").strip().casefold()
+
+
 @dataclass(frozen=True)
 class ContextPattern:
     rule_id: str
@@ -662,12 +689,17 @@ def select_candidate_orders_unified(
         normalized_details,
     ):
         owner = "" if pd.isna(subcategory) else str(subcategory)
+        shape_decision = _shape_rule_decision(raw_detail, owner, normal_document)
         exact_auto_error = (owner, detail) in error["active_exact"]
         phrase_auto_error = (
             not exact_auto_error
             and matches_scoped_error_phrase(owner, detail, error["active_phrases"])
         )
-        auto_error = exact_auto_error or phrase_auto_error
+        auto_error = (
+            shape_decision == "auto_error"
+            or exact_auto_error
+            or phrase_auto_error
+        )
 
         exact_review = (owner, detail) in error["review_exact"]
         phrase_review = (
@@ -711,12 +743,18 @@ def select_candidate_orders_unified(
         leading_lock = bool(leading_owners)
         strong_lock = bool(strong_owners)
         context_lock = bracket_lock or leading_lock or strong_lock
-        candidate_lock = protected_review or dominant_anomaly or context_lock
+        candidate_lock = (
+            shape_decision != "normal"
+            and (protected_review or dominant_anomaly or context_lock)
+        )
 
         normal_row = (
-            not auto_error
-            and not candidate_lock
-            and (override_match or (own_match and not hard_other_match))
+            shape_decision == "normal"
+            or (
+                not auto_error
+                and not candidate_lock
+                and (override_match or (own_match and not hard_other_match))
+            )
         )
         is_candidate = not auto_error and not normal_row
         candidate_flags.append(is_candidate)
@@ -756,6 +794,10 @@ def select_candidate_orders_unified(
         counters["컨텍스트후보잠금행수"] += int(context_lock)
         counters["정확문장자동오생성행수"] += int(exact_auto_error)
         counters["문구조합자동오생성행수"] += int(phrase_auto_error)
+        counters["보증보험형식정상행수"] += int(shape_decision == "normal")
+        counters["보증보험형식자동오생성행수"] += int(
+            shape_decision == "auto_error"
+        )
         counters["정상제외행수"] += int(normal_row)
 
     # Explicit review/context locks are deliberately invisible to similarity

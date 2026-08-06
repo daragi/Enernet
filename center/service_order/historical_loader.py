@@ -415,7 +415,7 @@ def _clean_dimension_series(series: pd.Series) -> pd.Series:
     return cleaned.mask(cleaned.isna() | cleaned.eq(""), UNKNOWN_VALUE)
 
 
-def _detect_total_header(path: Path) -> int:
+def _detect_total_header(path: Path) -> tuple[str, int]:
     try:
         workbook = load_workbook(path, read_only=True, data_only=True)
     except Exception as exc:
@@ -427,18 +427,25 @@ def _detect_total_header(path: Path) -> int:
             raise HistoricalInputError(
                 f"월별 원본 Excel에 시트가 없습니다: {path.name}"
             )
-        worksheet = workbook.worksheets[0]
-        for row_number, row in enumerate(
-            worksheet.iter_rows(min_row=1, max_row=MAX_TOTAL_HEADER_ROWS),
-            start=1,
-        ):
-            values = {
-                _clean_scalar(cell.value)
-                for cell in row
-                if _clean_scalar(cell.value)
-            }
-            if TOTAL_HEADER_SIGNATURE.issubset(values):
-                return row_number - 1
+        candidates: list[tuple[int, str, int]] = []
+        for worksheet in workbook.worksheets:
+            for row_number, row in enumerate(
+                worksheet.iter_rows(min_row=1, max_row=MAX_TOTAL_HEADER_ROWS),
+                start=1,
+            ):
+                values = {
+                    _clean_scalar(cell.value)
+                    for cell in row
+                    if _clean_scalar(cell.value)
+                }
+                if TOTAL_HEADER_SIGNATURE.issubset(values):
+                    candidates.append(
+                        (worksheet.max_row, worksheet.title, row_number - 1)
+                    )
+                    break
+        if candidates:
+            _, sheet_name, header_row = max(candidates, key=lambda item: item[0])
+            return sheet_name, header_row
     finally:
         workbook.close()
     raise HistoricalInputError(
@@ -468,11 +475,17 @@ def _read_total_source(
             f"지원하지 않는 월별 원본 형식입니다: {source_path.name}"
         )
 
-    header_row = _detect_total_header(source_path)
+    header_location = _detect_total_header(source_path)
+    if isinstance(header_location, tuple):
+        sheet_name, header_row = header_location
+    else:
+        # Keep compatibility with tests and external callers that monkeypatch
+        # the older integer-only detector contract.
+        sheet_name, header_row = 0, header_location
     try:
         raw = pd.read_excel(
             source_path,
-            sheet_name=0,
+            sheet_name=sheet_name,
             header=header_row,
             usecols=lambda name: str(name).strip() in TOTAL_SOURCE_COLUMNS,
         )
@@ -764,6 +777,7 @@ def load_historical_aggregates(
     months: Iterable[int] = range(1, 7),
     blank_row_limit: int = 200,
     sap_id_map: Mapping[str, str] | None = None,
+    source_paths: Mapping[int, str | Path] | None = None,
 ) -> HistoricalLoadResult:
     """Validate and reduce historical totals and confirmed errors.
 
@@ -782,6 +796,10 @@ def load_historical_aggregates(
         Month numbers to load.  Defaults to January through June.
     blank_row_limit:
         Stop streaming a truth sheet after this many consecutive empty rows.
+    source_paths:
+        Optional explicit workbook path per month for historical sources with
+        a different folder or filename convention. Source rows are still
+        reduced in memory one month at a time and then discarded.
 
     Returns
     -------
@@ -809,7 +827,7 @@ def load_historical_aggregates(
 
     source_directory = Path(source_dir)
     truth_file = Path(truth_path)
-    if not source_directory.is_dir():
+    if source_paths is None and not source_directory.is_dir():
         raise HistoricalInputError(
             f"월별 원본 폴더를 찾을 수 없습니다: {source_directory}"
         )
@@ -835,6 +853,15 @@ def load_historical_aggregates(
         )
         legacy_path = source_directory / f"{month}월.pkl"
         source_path = original_path if original_path.is_file() else legacy_path
+        if source_paths is not None:
+            configured_path = source_paths.get(month)
+            if configured_path is None:
+                raise HistoricalInputError(
+                    f"Historical source path is not configured for month {month}."
+                )
+            source_path = Path(configured_path)
+            original_path = source_path
+            legacy_path = source_path
         if not source_path.is_file():
             raise HistoricalInputError(
                 "월별 원본을 찾을 수 없습니다: "
